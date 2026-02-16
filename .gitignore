@@ -1,0 +1,18 @@
+# Living Doc state (подписи кода по проектам)
+.livedoc/
+# Пример в репозитории — коммитим для CI
+!examples/.livedoc/
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+dist/
+build/
+.pytest_cache/
+.ruff_cache/
+
+# IDE
+.idea/
+*.iml

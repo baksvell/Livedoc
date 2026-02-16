@@ -1,0 +1,18 @@
+{
+  "sample_module.calc:add": {
+    "hash": "b5b9fba569d00fadd1b98a49664fb77d12d4af8d555afef3e5618ce31140d201",
+    "sig": "add(a, b) -> int"
+  },
+  "sample_module.calc:subtract": {
+    "hash": "ac141b114c1c85ae99329094a3a4473e869a7ac17cfaf3d61e2733e9e5749483",
+    "sig": "subtract(a, b) -> int"
+  },
+  "sample_module.calc:Calculator.multiply": {
+    "hash": "022b17c7be5f76dd296744a0c6c449b8da626d329e1613f849254706c1325ed7",
+    "sig": "multiply(x, y) -> float"
+  },
+  "sample_module.calc:Calculator.divide": {
+    "hash": "27ff9d28e084c5ad4e87ea79df5a5cb36707a33f3e478f466d495080b987b089",
+    "sig": "divide(a, b) -> float"
+  }
+}

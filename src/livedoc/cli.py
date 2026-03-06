@@ -20,9 +20,29 @@ from livedoc.report.reporter import report_outdated
 
 DEFAULT_DOCS_DIR = "docs"
 SIGNATURES_FILE = ".livedoc/code_signatures.json"
+LIVEDOCIGNORE_FILE = ".livedocignore"
 
 
-def run_check(project_root: Path, docs_dir: str, update_signatures: bool) -> int:
+def _load_livedocignore(root: Path) -> tuple[str, ...]:
+    """Load patterns from .livedocignore (one per line, # comments ignored)."""
+    path = root / LIVEDOCIGNORE_FILE
+    if not path.exists():
+        return ()
+    patterns: list[str] = []
+    for line in path.read_text(encoding="utf-8").splitlines():
+        line = line.strip()
+        if line and not line.startswith("#"):
+            patterns.append(line)
+    return tuple(patterns)
+
+
+def run_check(
+    project_root: Path,
+    docs_dir: str,
+    update_signatures: bool,
+    ignore_patterns: tuple[str, ...] = (),
+    output_format: str = "text",
+) -> int:
     """
     Собрать граф код↔док, сравнить подписи с сохранёнными, вывести устаревшие фрагменты.
     Возвращает 1 если есть устаревшие, 0 если всё актуально.
@@ -31,11 +51,17 @@ def run_check(project_root: Path, docs_dir: str, update_signatures: bool) -> int
     code_path = root  # по умолчанию весь проект; можно сузить до src/ или пакета
     docs_path = root / docs_dir
     if not docs_path.exists():
-        print(f"Папка документации не найдена: {docs_path}", file=sys.stderr)
+        print(f"Documentation folder not found: {docs_path}", file=sys.stderr)
         return 2
 
     # Парсим код (Python)
-    entities = parse_python_module(root, code_path)
+    from livedoc.parsers.python_parser import DEFAULT_IGNORE
+
+    ignore = list(DEFAULT_IGNORE)
+    ignore.extend(_load_livedocignore(root))
+    if ignore_patterns:
+        ignore.extend(ignore_patterns)
+    entities = parse_python_module(root, code_path, ignore_patterns=tuple(ignore))
     current_sigs = build_current_signatures(entities)
     entities_by_id = {e.code_id: e for e in entities}
     current_readable = {e.code_id: e.format_signature() for e in entities}
@@ -55,7 +81,7 @@ def run_check(project_root: Path, docs_dir: str, update_signatures: bool) -> int
         # Первый запуск: сохраняем текущее состояние, устаревших нет
         cs = CodeSignatures(current_sigs, readable=current_readable)
         cs.save(sig_path, readable=current_readable)
-        print("Первый запуск: подписи кода сохранены. При следующих изменениях кода связанная документация будет помечаться как устаревшая.")
+        print("First run: code signatures saved. Future code changes will mark linked docs as outdated.")
         return 0
 
     changed = stored.changed_code_ids(current_sigs)
@@ -74,9 +100,9 @@ def run_check(project_root: Path, docs_dir: str, update_signatures: bool) -> int
     if update_signatures:
         cs = CodeSignatures(current_sigs, readable=current_readable)
         cs.save(sig_path, readable=current_readable)
-        print("Подписи кода обновлены.")
+        print("Code signatures updated.")
 
-    report = report_outdated(outdated, changes=changes)
+    report = report_outdated(outdated, changes=changes, output_format=output_format)
     print(report)
 
     if outdated:
@@ -85,26 +111,40 @@ def run_check(project_root: Path, docs_dir: str, update_signatures: bool) -> int
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Living Documentation: проверка актуальности документации")
+    parser = argparse.ArgumentParser(description="Living Documentation: check doc freshness")
     parser.add_argument(
         "path",
         nargs="?",
         default=".",
         type=Path,
-        help="Корень проекта (по умолчанию текущая папка)",
+        help="Project root (default: current directory)",
     )
     parser.add_argument(
         "--docs",
         default=DEFAULT_DOCS_DIR,
-        help=f"Папка с документацией (по умолчанию {DEFAULT_DOCS_DIR})",
+        help=f"Documentation folder (default: {DEFAULT_DOCS_DIR})",
     )
     parser.add_argument(
         "--update",
         action="store_true",
-        help="После проверки обновить сохранённые подписи (считать док актуальной)",
+        help="After check, update stored signatures (mark docs as up to date)",
+    )
+    parser.add_argument(
+        "--ignore",
+        action="append",
+        default=[],
+        metavar="PATTERN",
+        help="Path segment or glob to ignore (e.g. tests, venv). Can be repeated.",
+    )
+    parser.add_argument(
+        "--format",
+        choices=("text", "json"),
+        default="text",
+        help="Output format: text (default) or json",
     )
     args = parser.parse_args()
-    return run_check(args.path, args.docs, args.update)
+    ignore = tuple(args.ignore) if args.ignore else ()
+    return run_check(args.path, args.docs, args.update, ignore, args.format)
 
 
 if __name__ == "__main__":

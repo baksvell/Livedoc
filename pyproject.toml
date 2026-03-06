@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "livedoc"
 version = "0.1.0"
-description = "Living Documentation: связь документации с кодом и проверка актуальности"
+description = "Living Documentation: link docs to code and check freshness when signatures change"
 readme = "README.md"
 requires-python = ">=3.10"
 license = { text = "MIT" }
@@ -32,6 +32,10 @@ dev = [
 
 [project.scripts]
 livedoc = "livedoc.cli:main"
+
+[project.urls]
+Homepage = "https://github.com/baksvell/Livedoc"
+Repository = "https://github.com/baksvell/Livedoc"
 
 [tool.setuptools.packages.find]
 where = ["src"]

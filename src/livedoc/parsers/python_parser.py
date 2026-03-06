@@ -5,9 +5,12 @@
 from __future__ import annotations
 
 import ast
+import fnmatch
 from pathlib import Path
 
 from livedoc.core.signatures import CodeEntity
+
+DEFAULT_IGNORE = ("tests", "test_*", "venv", ".venv", "__pycache__", ".git", "*.egg-info")
 
 
 def _qualified_name(module_path: str, node: ast.AST, class_name: str | None = None) -> str:
@@ -88,18 +91,41 @@ def _path_to_module(root: Path, file_path: Path) -> str:
     return ".".join(parts)
 
 
-def parse_python_module(root: Path, package_path: Path) -> list[CodeEntity]:
+def _is_ignored(rel_path: Path, ignore_patterns: tuple[str, ...]) -> bool:
+    """True if path matches any ignore pattern (segment or glob)."""
+    parts = rel_path.parts
+    for pattern in ignore_patterns:
+        for part in parts:
+            if fnmatch.fnmatch(part, pattern) or part == pattern:
+                return True
+    return False
+
+
+def parse_python_module(
+    root: Path,
+    package_path: Path,
+    ignore_patterns: tuple[str, ...] = DEFAULT_IGNORE,
+) -> list[CodeEntity]:
     """
     Рекурсивно парсит Python-пакет/модуль и возвращает все сущности.
     root — корень проекта, package_path — папка или файл (например examples/sample_module).
+    ignore_patterns — сегменты путей или glob-паттерны для исключения (tests, venv, ...).
     """
     all_entities: list[CodeEntity] = []
     if package_path.is_file() and package_path.suffix == ".py":
+        if _is_ignored(package_path.relative_to(root), ignore_patterns):
+            return all_entities
         module_path = _path_to_module(root, package_path)
         all_entities.extend(parse_python_file(package_path, module_path))
         return all_entities
     for path in package_path.rglob("*.py"):
         if path.name.startswith("_"):
+            continue
+        try:
+            rel = path.relative_to(root)
+        except ValueError:
+            rel = path
+        if _is_ignored(rel, ignore_patterns):
             continue
         module_path = _path_to_module(root, path)
         all_entities.extend(parse_python_file(path, module_path))

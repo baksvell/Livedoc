@@ -80,6 +80,34 @@ def test_code_signatures_removed() -> None:
     assert changed == {"m:add"}
 
 
+def test_parse_python_module_ignores_tests() -> None:
+    """Default ignore excludes tests/ and similar paths."""
+    from livedoc.parsers.python_parser import DEFAULT_IGNORE, parse_python_module
+
+    root = EXAMPLES_ROOT
+    entities = parse_python_module(root, root, ignore_patterns=DEFAULT_IGNORE)
+    # examples/ has sample_module, no tests - so we get calc entities
+    code_ids = {e.code_id for e in entities}
+    assert "sample_module.calc:add" in code_ids
+    # With custom ignore including sample_module, we'd get nothing
+    empty = parse_python_module(root, root, ignore_patterns=("sample_module",))
+    assert len(empty) == 0
+
+
+def test_load_livedocignore() -> None:
+    from livedoc.cli import _load_livedocignore
+
+    import tempfile
+    with tempfile.TemporaryDirectory() as d:
+        root = Path(d)
+        ignore_file = root / ".livedocignore"
+        ignore_file.write_text("build\n# comment\nscripts\n", encoding="utf-8")
+        patterns = _load_livedocignore(root)
+        assert "build" in patterns
+        assert "scripts" in patterns
+        assert "#" not in "".join(patterns)
+
+
 def test_report_outdated_with_changes() -> None:
     from livedoc.core.graph import DocFragment
     from livedoc.report.reporter import report_outdated

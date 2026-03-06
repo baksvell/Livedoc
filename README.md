@@ -1,103 +1,148 @@
-# Живая документация (Living Documentation)
+# Living Documentation
 
-Инструмент, который связывает документацию с кодом так, чтобы она не устаревала: при изменении сигнатур, API или аргументов система помечает связанные параграфы как «возможно устарело» и подсказывает, что поправить.
+[![Living Documentation Check](https://github.com/baksvell/Livedoc/actions/workflows/livedoc.yml/badge.svg)](https://github.com/baksvell/Livedoc/actions/workflows/livedoc.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-## Цели
+A tool that links documentation to code so it stays up to date. When function signatures, APIs, or arguments change, the system marks related documentation paragraphs as "possibly outdated" and suggests what to fix.
 
-- **Связь код ↔ док**: явный маппинг между сущностями кода (функции, классы, API) и фрагментами документации
-- **Проверка актуальности**: после изменений в коде — пометка «устарело» и подсказки, что обновить
-- **Просмотр в контексте**: в будущем — показ актуального фрагмента доки в IDE при наведении на вызов
-- **Документация рядом с кодом**: хранение в репозитории, просмотр как сайт с навигацией и поиском
+## Goals
 
-## С чего начать (рекомендация)
+- **Code ↔ doc linking**: explicit mapping between code entities (functions, classes, APIs) and documentation fragments
+- **Freshness checking**: after code changes — mark outdated sections and suggest updates
+- **Contextual view** (planned): show the relevant doc fragment in the IDE when hovering over a function or method call
+- **Docs next to code**: store documentation in the repository and view it as a site with navigation and search
 
-Оптимальный порядок:
+## Where to Start (recommendation)
 
-1. **Формат маппинга код↔документация** — без него нельзя однозначно связать параграф доки с сущностью кода. Определить его первым.
-2. **Структура репозитория и стек** — один язык для MVP (Python), общая архитектура, чтобы потом добавлять другие языки и IDE.
-3. **Прототип на одном примере** — один модуль, одна страница доки, парсер кода, проверка «документ устарел после изменения в коде».
+Recommended order:
 
-То есть: **сначала формат и структура, затем минимальный прототип**.
+1. **Code ↔ documentation mapping format** — without it, you can't unambiguously link a doc paragraph to a code entity. Define this first.
+2. **Repository structure and stack** — one language for MVP (Python), shared architecture for future languages and IDE support.
+3. **Prototype on one example** — one module, one doc page, code parser, and a check that "the document is outdated after a code change."
 
-## Минимальная архитектура
+In short: **first the format and structure, then a minimal prototype**.
+
+## Architecture Overview
 
 ```
 ┌─────────────────┐     ┌──────────────────┐     ┌─────────────────────┐
-│  Парсер кода    │────▶│  Граф связей      │◀────│  Парсер документации│
-│  (AST / API)    │     │  (code_id ↔ doc)  │     │  (markdown + анкоры)│
+│  Code parser    │────▶│  Link graph      │◀────│  Doc parser         │
+│  (AST / API)    │     │  (code_id ↔ doc) │     │  (markdown + anchors)│
 └────────┬────────┘     └────────┬──────────┘     └─────────────────────┘
          │                      │
          ▼                      ▼
 ┌─────────────────┐     ┌──────────────────┐
-│  Детектор       │     │  Отчёт/сайт      │
-│  изменений      │────▶│  «устарело» +    │
-│  (diff / hash)  │     │  подсказки       │
+│  Change         │     │  Report / site   │
+│  detector       │────▶│  "outdated" +    │
+│  (diff / hash)  │     │  suggestions     │
 └─────────────────┘     └──────────────────┘
 ```
 
-- **Парсер кода**: извлечение сигнатур (имя, аргументы, типы) и уникальных идентификаторов (например, `module.function` или `file:line`).
-- **Парсер документации**: markdown с явными анкорами (см. `spec/code-doc-mapping.md`), привязка параграфов/блоков к `code_id`.
-- **Граф связей**: хранилище пар (code_id, doc_fragment_id). При изменении кода (новая сигнатура/хеш) помечаем связанные фрагменты как «возможно устарело».
-- **Детектор изменений**: сравнение текущего состояния кода (сигнатуры/хеши) с сохранённым при последней проверке.
+- **Code parser**: extracts signatures (name, arguments, types) and unique identifiers (e.g., `module.function` or `file:line`).
+- **Doc parser**: parses Markdown with explicit anchors (see `spec/code-doc-mapping.md`), associating paragraphs/blocks with `code_id`.
+- **Link graph**: stores (code_id, doc_fragment_id) pairs. When code changes (new signature/hash), related fragments are marked as "possibly outdated."
+- **Change detector**: compares current code state (signatures/hashes) with the last saved state.
 
-Расширяемость: парсеры кода и доков — плагины по языку; граф и отчёт — общие.
+Extensibility: code and doc parsers are per-language plugins; the graph and report are shared.
 
-## Формат хранения документации
+## Documentation Format
 
-- **Основной формат**: Markdown в репозитории (отдельная папка `docs/` или рядом с модулями).
-- **Связь с кодом**: анкоры в markdown (см. `spec/code-doc-mapping.md`) плюс опционально аннотации в коде (docstring-теги), ссылающиеся на id фрагмента.
-- **Сайт**: генерация статического сайта (MkDocs, Docusaurus, или свой генератор) из тех же markdown-файлов; навигация и поиск — поверх сгенерированного сайта.
+- **Primary format**: Markdown in the repository (e.g., a `docs/` folder or next to modules).
+- **Linking to code**: anchors in Markdown (see `spec/code-doc-mapping.md`), optionally plus annotations in code (docstring tags) that reference a fragment id.
+- **Site**: generate a static site (MkDocs, Docusaurus, or custom) from the same Markdown files; navigation and search on top of the generated site.
 
-## MVP (первая итерация)
+## MVP (First Iteration)
 
-- **Язык**: Python.
-- **Функциональность**:
-  - Парсинг одного модуля (функции/методы, сигнатуры).
-  - Одна страница документации с анкорами к этим сущностям.
-  - Проверка: «после изменения сигнатуры в коде связанный параграф помечается как устаревший».
-- **Расширяемость**: абстракции для парсера кода и формата анкоров, чтобы позже добавить другие языки и IDE-интеграцию.
+- **Language**: Python
+- **Features**:
+  - Parse modules (functions, methods, signatures)
+  - One documentation page with anchors to those entities
+  - Check: when a signature changes in code, the related doc paragraph is marked as outdated
+- **Extensibility**: abstractions for the code parser and anchor format to support more languages and IDE integration later.
 
-## Структура репозитория
+## Repository Structure
 
 ```
 LiveDoc/
-├── README.md                 # этот файл
+├── README.md                 # this file
 ├── spec/
-│   └── code-doc-mapping.md   # формат анкоров и маппинга код↔док
+│   └── code-doc-mapping.md  # anchor format and code↔doc mapping
 ├── src/
 │   └── livedoc/
 │       ├── __init__.py
-│       ├── core/             # граф связей, детектор изменений
-│       ├── parsers/          # парсер кода (Python), парсер доков
-│       └── report/           # отчёт «устарело», в будущем — генерация сайта
+│       ├── core/            # link graph, change detector
+│       ├── parsers/         # Python code parser, doc parser
+│       └── report/          # "outdated" report, future site generation
 ├── tests/
-├── examples/                 # пример проекта для проверки MVP
+├── examples/                # sample project for testing MVP
 │   ├── sample_module/
 │   └── docs/
 └── pyproject.toml
 ```
 
-## Запуск MVP
+## Quick Start (Add to Your Project)
+
+1. **Install**: `pip install livedoc` (or `pip install -e .` from this repo)
+
+2. **Create docs** in `docs/` with anchors linking to code:
+   ```markdown
+   <!-- livedoc: code_id = "mymodule.calc:add" -->
+   ## add
+   Adds two numbers.
+   ```
+
+3. **First run** (saves code signatures):
+   ```bash
+   livedoc --docs docs
+   ```
+
+4. **CI**: Add to your workflow:
+   ```yaml
+   - run: pip install livedoc && livedoc --docs docs
+   ```
+
+5. **Optional**: Add `.livedocignore` in project root (one pattern per line) to exclude paths:
+   ```
+   build
+   scripts
+   ```
+
+## Running the MVP (This Repo)
 
 ```bash
-# Установка (опционально, для команды livedoc)
+# Install (optional, for livedoc command)
 pip install -e .
 
-# Проверка связей и актуальности для примера (из корня репозитория)
+# Check links and freshness for the example (from repo root)
 python -m livedoc.cli examples --docs docs
 
-# Первый запуск сохраняет подписи кода в examples/.livedoc/code_signatures.json.
-# После изменения сигнатуры функции/метода в коде повторный запуск покажет
-# связанные фрагменты документации как «возможно устарело» и diff старой/новой сигнатуры.
-# Для обновления подписей после правки доки: --update
+# First run saves code signatures to examples/.livedoc/code_signatures.json.
+# After changing a function/method signature, the next run will show
+# related doc fragments as "possibly outdated" with a diff of old vs new signature.
+# To update signatures after editing docs: --update
+
+# Options:
+#   --ignore PATTERN   Exclude paths (e.g. --ignore mytests, can be repeated)
+#   --format json      Machine-readable output for CI/scripts
+#   .livedocignore     File with ignore patterns (one per line)
 ```
 
 ## CI (GitHub Actions)
 
-Workflow `.github/workflows/livedoc.yml` запускает `livedoc check` при push/PR. Для работы CI папка `examples/.livedoc` с подписями закоммичена. При изменении кода без обновления доки или без `--update` job fails.
+The workflow `.github/workflows/livedoc.yml` runs `livedoc check` on push and pull requests. The `examples/.livedoc` folder with signatures is committed so CI has a baseline. If code changes without updating docs or without `--update`, the job fails.
 
-## Дальнейшие шаги
+## Publishing to PyPI
 
-- Поддержка других языков (парсеры в `parsers/`).
-- IDE-интеграция: LSP или расширение (показ доки по hover).
-- Генерация и сервирование сайта документации с подсветкой «устарело».
+```bash
+pip install build twine
+python -m build
+twine upload dist/*
+```
+
+Requires a PyPI account and token. First time: `twine upload dist/*` will prompt for credentials.
+
+## Next Steps
+
+- Add parsers for other languages in `parsers/`
+- IDE integration: LSP or extension (show docs on hover)
+- Generate and serve a documentation site with "outdated" highlights

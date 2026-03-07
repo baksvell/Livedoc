@@ -1,6 +1,4 @@
-"""
-Формирование отчёта об устаревших фрагментах документации.
-"""
+"""Report generation for outdated documentation fragments."""
 
 from __future__ import annotations
 
@@ -28,9 +26,9 @@ def report_outdated(
     output_format: str = "text",
 ) -> str:
     """
-    Собирает отчёт: какие фрагменты доки помечены как устаревшими и что изменилось.
-    changes: code_id -> (старая_сигнатура, новая_сигнатура)
-    output_format: "text" или "json"
+    Build report: which doc fragments are outdated and what changed.
+    changes: code_id -> (old_sig, new_sig)
+    output_format: "text" or "json"
     """
     changes = changes or {}
 

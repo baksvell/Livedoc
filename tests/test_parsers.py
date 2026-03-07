@@ -1,4 +1,4 @@
-"""Тесты парсеров и проверки устаревания."""
+"""Tests for parsers and outdated detection."""
 
 from pathlib import Path
 
@@ -6,7 +6,7 @@ import pytest
 
 from livedoc.core.graph import DocGraph
 from livedoc.core.signatures import CodeSignatures, signature_hash
-from livedoc.parsers.doc_parser import parse_doc_anchors, parse_doc_file
+from livedoc.parsers.doc_parser import parse_doc_file
 from livedoc.parsers.python_parser import (
     build_current_signatures,
     parse_python_file,

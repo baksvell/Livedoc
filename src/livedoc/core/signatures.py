@@ -12,7 +12,7 @@ from pathlib import Path
 
 
 def signature_hash(name: str, args: list[str], return_annotation: str = "") -> str:
-    """Строит устойчивый хеш по имени и сигнатуре (аргументы + возврат)."""
+    """Build stable hash from name and signature (args + return)."""
     payload = json.dumps(
         {"name": name, "args": sorted(args), "return": return_annotation},
         sort_keys=True,
@@ -22,7 +22,7 @@ def signature_hash(name: str, args: list[str], return_annotation: str = "") -> s
 
 @dataclass
 class CodeEntity:
-    """Сущность кода с подписью (для Python — функция/метод)."""
+    """Code entity with signature (Python: function or method)."""
 
     code_id: str
     name: str
@@ -35,7 +35,7 @@ class CodeEntity:
         return signature_hash(self.name, self.args, self.return_annotation)
 
     def format_signature(self) -> str:
-        """Человекочитаемая сигнатура: add(a, b) -> int."""
+        """Human-readable signature: add(a, b) -> int."""
         args_str = ", ".join(self.args)
         ret = f" -> {self.return_annotation}" if self.return_annotation else ""
         return f"{self.name}({args_str}){ret}"
@@ -43,19 +43,13 @@ class CodeEntity:
 
 @dataclass
 class CodeSignatures:
-    """
-    Хранилище подписей кода: code_id -> hash, опционально readable-сигнатура.
-    Позволяет сравнить текущее состояние кода с сохранённым и получить изменённые code_id.
-    """
+    """Store code signatures: code_id -> hash, optionally readable. Compare and get changed code_id."""
 
     signatures: dict[str, str]  # code_id -> signature_hash
     readable: dict[str, str] = field(default_factory=dict)  # code_id -> "add(a, b) -> int"
 
     def changed_code_ids(self, current: dict[str, str]) -> set[str]:
-        """
-        current: code_id -> текущий signature_hash.
-        Возвращает code_id, для которых подпись изменилась или сущность удалена.
-        """
+        """Return code_ids whose signature changed or entity was removed."""
         changed: set[str] = set()
         for code_id, new_hash in current.items():
             old_hash = self.signatures.get(code_id)
@@ -63,23 +57,23 @@ class CodeSignatures:
                 changed.add(code_id)
         for code_id in self.signatures:
             if code_id not in current:
-                changed.add(code_id)  # удалён из кода
+                changed.add(code_id)  # removed from code
         return changed
 
     def get_readable(self, code_id: str) -> str | None:
-        """Получить сохранённую readable-сигнатуру (если есть)."""
+        """Get stored readable signature if any."""
         return self.readable.get(code_id)
 
     def update(self, current: dict[str, str], readable: dict[str, str] | None = None) -> None:
-        """Обновить сохранённые подписи до текущего состояния."""
+        """Update stored signatures to current state."""
         self.signatures = dict(current)
         if readable is not None:
             self.readable = dict(readable)
 
     def save(self, path: Path, readable: dict[str, str] | None = None) -> None:
-        """Сохранить в JSON (например .livedoc/code_signatures.json)."""
+        """Save to JSON (e.g. .livedoc/code_signatures.json)."""
         path.parent.mkdir(parents=True, exist_ok=True)
-        # Сохраняем hash + readable в едином формате для удобства
+        # Save hash + readable in single format
         out: dict[str, str | dict] = {}
         for code_id, h in self.signatures.items():
             sig = (readable or self.readable).get(code_id)
@@ -91,7 +85,7 @@ class CodeSignatures:
 
     @classmethod
     def load(cls, path: Path) -> CodeSignatures | None:
-        """Загрузить из JSON; если файла нет — вернуть None."""
+        """Load from JSON; return None if file does not exist."""
         if not path.exists():
             return None
         data = json.loads(path.read_text(encoding="utf-8"))

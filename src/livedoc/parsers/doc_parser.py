@@ -1,6 +1,4 @@
-"""
-Парсер документации (Markdown): поиск анкоров livedoc и извлечение связей code_id <-> фрагмент.
-"""
+"""Markdown doc parser: find livedoc anchors and extract code_id <-> fragment links."""
 
 from __future__ import annotations
 
@@ -10,7 +8,7 @@ from pathlib import Path
 from livedoc.core.graph import DocFragment
 
 
-# <!-- livedoc: code_id = "module:func" --> или code_id = "a", "b"
+# <!-- livedoc: code_id = "module:func" --> or code_id = "a", "b"
 ANCHOR_RE = re.compile(
     r"<!--\s*livedoc:\s*code_id\s*=\s*(.+?)\s*-->",
     re.IGNORECASE | re.DOTALL,
@@ -18,7 +16,7 @@ ANCHOR_RE = re.compile(
 
 
 def _parse_code_ids(value: str) -> list[str]:
-    """Из значения атрибута code_id извлечь список идентификаторов ("a", "b" или "a")."""
+    """Extract code_id list from attribute value ("a", "b" or "a")."""
     ids: list[str] = []
     for part in re.split(r",", value):
         part = part.strip().strip('"').strip("'").strip()
@@ -28,7 +26,7 @@ def _parse_code_ids(value: str) -> list[str]:
 
 
 def _heading_from_next_line(lines: list[str], start: int) -> str:
-    """Найти следующий заголовок Markdown (## ...) после start."""
+    """Find next Markdown heading (## ...) after start."""
     for i in range(start, min(start + 3, len(lines))):
         line = lines[i]
         if line.strip().startswith("#"):
@@ -37,9 +35,7 @@ def _heading_from_next_line(lines: list[str], start: int) -> str:
 
 
 def parse_doc_file(file_path: Path, root: Path) -> list[DocFragment]:
-    """
-    Парсит один Markdown-файл и возвращает список фрагментов с анкорами livedoc.
-    """
+    """Parse one Markdown file and return fragments with livedoc anchors."""
     fragments: list[DocFragment] = []
     text = file_path.read_text(encoding="utf-8")
     lines = text.splitlines()
@@ -68,9 +64,7 @@ def parse_doc_file(file_path: Path, root: Path) -> list[DocFragment]:
 
 
 def parse_doc_anchors(docs_root: Path) -> list[DocFragment]:
-    """
-    Рекурсивно обходит docs_root и собирает все фрагменты с анкорами livedoc.
-    """
+    """Recursively scan docs_root and collect all fragments with livedoc anchors."""
     all_fragments: list[DocFragment] = []
     for path in docs_root.rglob("*.md"):
         all_fragments.extend(parse_doc_file(path, docs_root))

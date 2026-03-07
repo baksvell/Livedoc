@@ -1,6 +1,4 @@
-"""
-CLI: livedoc check [путь к проекту]
-"""
+"""CLI: livedoc check [project path]."""
 
 from __future__ import annotations
 
@@ -44,17 +42,17 @@ def run_check(
     output_format: str = "text",
 ) -> int:
     """
-    Собрать граф код↔док, сравнить подписи с сохранёнными, вывести устаревшие фрагменты.
-    Возвращает 1 если есть устаревшие, 0 если всё актуально.
+    Build code↔doc graph, compare signatures, output outdated fragments.
+    Returns 1 if outdated, 0 if up to date.
     """
     root = project_root.resolve()
-    code_path = root  # по умолчанию весь проект; можно сузить до src/ или пакета
+    code_path = root
     docs_path = root / docs_dir
     if not docs_path.exists():
         print(f"Documentation folder not found: {docs_path}", file=sys.stderr)
         return 2
 
-    # Парсим код (Python)
+    # Parse code
     from livedoc.parsers.python_parser import DEFAULT_IGNORE
 
     ignore = list(DEFAULT_IGNORE)
@@ -66,19 +64,19 @@ def run_check(
     entities_by_id = {e.code_id: e for e in entities}
     current_readable = {e.code_id: e.format_signature() for e in entities}
 
-    # Парсим документацию
+    # Parse docs
     fragments = parse_doc_anchors(docs_path)
     graph = DocGraph()
     for f in fragments:
         for code_id in f.code_ids:
             graph.add_link(code_id, f)
 
-    # Загружаем сохранённые подписи
+    # Load stored signatures
     sig_path = root / SIGNATURES_FILE
     stored = CodeSignatures.load(sig_path)
 
     if stored is None:
-        # Первый запуск: сохраняем текущее состояние, устаревших нет
+        # First run: save current state
         cs = CodeSignatures(current_sigs, readable=current_readable)
         cs.save(sig_path, readable=current_readable)
         print("First run: code signatures saved. Future code changes will mark linked docs as outdated.")
@@ -87,14 +85,14 @@ def run_check(
     changed = stored.changed_code_ids(current_sigs)
     outdated = graph.get_outdated_fragments(changed)
 
-    # Детали изменений: code_id -> (old_sig, new_sig)
+    # Change details: code_id -> (old_sig, new_sig)
     changes: dict[str, tuple[str | None, str | None]] = {}
     for code_id in changed:
         old_sig = stored.get_readable(code_id)
         if code_id in entities_by_id:
             new_sig = entities_by_id[code_id].format_signature()
         else:
-            new_sig = None  # сущность удалена
+            new_sig = None  # entity removed
         changes[code_id] = (old_sig, new_sig)
 
     if update_signatures:

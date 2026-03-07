@@ -1,7 +1,4 @@
-"""
-Граф связей: code_id <-> doc_fragment_id.
-Хранит пары и позволяет по изменённым code_id находить устаревшие фрагменты доки.
-"""
+"""Link graph: code_id <-> doc_fragment_id. Find outdated fragments by changed code_id."""
 
 from __future__ import annotations
 
@@ -11,9 +8,9 @@ from pathlib import Path
 
 @dataclass
 class DocFragment:
-    """Фрагмент документации с привязкой к коду."""
+    """Documentation fragment linked to code."""
 
-    doc_fragment_id: str  # например "docs/api.md#add"
+    doc_fragment_id: str  # e.g. "docs/api.md#add"
     file_path: Path
     line_start: int
     code_ids: list[str]
@@ -22,18 +19,14 @@ class DocFragment:
 
 @dataclass
 class DocGraph:
-    """
-    Граф связей код ↔ документация.
-    code_id -> список doc_fragment_id; по изменённым code_id можно получить «устаревшие» фрагменты.
-    """
+    """Link graph code ↔ docs. Get outdated fragments by changed code_id."""
 
-    # code_id -> список DocFragment (фрагменты доки, описывающие этот код)
+    # code_id -> list of DocFragment
     code_to_docs: dict[str, list[DocFragment]] = field(default_factory=dict)
-    # все фрагменты для итерации
     fragments: list[DocFragment] = field(default_factory=list)
 
     def add_link(self, code_id: str, fragment: DocFragment) -> None:
-        """Добавить связь code_id -> фрагмент доки."""
+        """Add link code_id -> doc fragment."""
         if code_id not in self.code_to_docs:
             self.code_to_docs[code_id] = []
         if fragment not in self.code_to_docs[code_id]:
@@ -42,7 +35,7 @@ class DocGraph:
             self.fragments.append(fragment)
 
     def get_outdated_fragments(self, changed_code_ids: set[str]) -> list[DocFragment]:
-        """По множеству изменённых code_id вернуть все связанные фрагменты доки (устаревшие)."""
+        """Return all doc fragments linked to changed code_id (outdated)."""
         outdated: list[DocFragment] = []
         seen: set[str] = set()
         for code_id in changed_code_ids:

@@ -1,4 +1,4 @@
-"""Ядро: граф связей код↔док, подписи кода, детектор изменений."""
+"""Core: link graph, code signatures, change detector."""
 
 from livedoc.core.graph import DocGraph
 from livedoc.core.signatures import CodeSignatures

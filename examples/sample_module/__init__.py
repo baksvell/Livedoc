@@ -1,1 +1,1 @@
-# Пример модуля для проверки Living Documentation
+"""Sample module for Living Documentation demo."""

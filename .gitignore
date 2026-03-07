@@ -1,6 +1,5 @@
-# Living Doc state (подписи кода по проектам)
+# Living Doc state
 .livedoc/
-# Пример в репозитории — коммитим для CI
 !examples/.livedoc/
 
 # Python

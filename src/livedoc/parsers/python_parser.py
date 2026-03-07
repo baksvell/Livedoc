@@ -1,6 +1,4 @@
-"""
-Парсер Python-модулей: извлечение функций и методов с сигнатурами и построение code_id.
-"""
+"""Python module parser: extract functions/methods with signatures and build code_id."""
 
 from __future__ import annotations
 
@@ -14,14 +12,14 @@ DEFAULT_IGNORE = ("tests", "test_*", "venv", ".venv", "__pycache__", ".git", "*.
 
 
 def _qualified_name(module_path: str, node: ast.AST, class_name: str | None = None) -> str:
-    """Строит code_id в формате module_path:name или module_path:Class.method."""
+    """Build code_id as module_path:name or module_path:Class.method."""
     if class_name:
         return f"{module_path}:{class_name}.{getattr(node, 'name', '')}"
     return f"{module_path}:{getattr(node, 'name', '')}"
 
 
 def _get_args(node: ast.FunctionDef) -> list[str]:
-    """Извлечь имена аргументов из ast.FunctionDef (включая *args, **kwargs)."""
+    """Extract argument names from ast.FunctionDef (including *args, **kwargs)."""
     args: list[str] = []
     for a in node.args.args:
         if a.arg == "self":
@@ -35,17 +33,14 @@ def _get_args(node: ast.FunctionDef) -> list[str]:
 
 
 def _return_annotation(node: ast.FunctionDef) -> str:
-    """Строковое представление аннотации возврата."""
+    """String representation of return annotation."""
     if node.returns is None:
         return ""
     return ast.unparse(node.returns) if hasattr(ast, "unparse") else ""
 
 
 def parse_python_file(file_path: Path, module_path: str) -> list[CodeEntity]:
-    """
-    Парсит один .py файл и возвращает список сущностей (функции и методы).
-    module_path — имя модуля для code_id, например "examples.sample_module.calc".
-    """
+    """Parse one .py file and return entities (functions and methods)."""
     entities: list[CodeEntity] = []
     source = file_path.read_text(encoding="utf-8")
     tree = ast.parse(source)
@@ -81,7 +76,7 @@ def parse_python_file(file_path: Path, module_path: str) -> list[CodeEntity]:
 
 
 def _path_to_module(root: Path, file_path: Path) -> str:
-    """Путь к файлу относительно root -> dotted module name."""
+    """File path relative to root -> dotted module name."""
     rel = file_path.relative_to(root)
     parts = list(rel.parts)
     if parts[-1] == "__init__.py":
@@ -92,7 +87,7 @@ def _path_to_module(root: Path, file_path: Path) -> str:
 
 
 def _is_ignored(rel_path: Path, ignore_patterns: tuple[str, ...]) -> bool:
-    """True if path matches any ignore pattern (segment or glob)."""
+    """Return True if path matches any ignore pattern (segment or glob)."""
     parts = rel_path.parts
     for pattern in ignore_patterns:
         for part in parts:
@@ -107,9 +102,8 @@ def parse_python_module(
     ignore_patterns: tuple[str, ...] = DEFAULT_IGNORE,
 ) -> list[CodeEntity]:
     """
-    Рекурсивно парсит Python-пакет/модуль и возвращает все сущности.
-    root — корень проекта, package_path — папка или файл (например examples/sample_module).
-    ignore_patterns — сегменты путей или glob-паттерны для исключения (tests, venv, ...).
+    Recursively parse Python package/module and return all entities.
+    ignore_patterns: path segments or globs to exclude (tests, venv, ...).
     """
     all_entities: list[CodeEntity] = []
     if package_path.is_file() and package_path.suffix == ".py":
@@ -133,5 +127,5 @@ def parse_python_module(
 
 
 def build_current_signatures(entities: list[CodeEntity]) -> dict[str, str]:
-    """Из списка сущностей строит code_id -> signature_hash для сравнения."""
+    """Build code_id -> signature_hash map from entities for comparison."""
     return {e.code_id: e.get_signature_hash() for e in entities}

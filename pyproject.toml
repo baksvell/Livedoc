@@ -3,7 +3,7 @@ requires = ["setuptools>=61", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "livedoc"
+name = "living-doc"
 version = "0.1.0"
 description = "Living Documentation: link docs to code and check freshness when signatures change"
 readme = "README.md"

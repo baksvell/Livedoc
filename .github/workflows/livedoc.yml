@@ -20,6 +20,5 @@ jobs:
       - name: Install livedoc
         run: pip install -e .
 
-      # Проверка: при изменении кода без обновления доки или --update job fails
       - name: Check documentation freshness
-        run: python -m livedoc.cli examples --docs docs
+        run: python -m livedoc examples --docs docs

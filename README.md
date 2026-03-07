@@ -1,6 +1,7 @@
 # Living Documentation
 
 [![Living Documentation Check](https://github.com/baksvell/Livedoc/actions/workflows/livedoc.yml/badge.svg)](https://github.com/baksvell/Livedoc/actions/workflows/livedoc.yml)
+[![PyPI](https://img.shields.io/pypi/v/living-doc.svg)](https://pypi.org/project/living-doc/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 A tool that links documentation to code so it stays up to date. When function signatures, APIs, or arguments change, the system marks related documentation paragraphs as "possibly outdated" and suggests what to fix.
@@ -82,7 +83,7 @@ LiveDoc/
 
 ## Quick Start (Add to Your Project)
 
-1. **Install**: `pip install livedoc` (or `pip install -e .` from this repo)
+1. **Install**: `pip install living-doc` (or `pip install -e .` from this repo)
 
 2. **Create docs** in `docs/` with anchors linking to code:
    ```markdown
@@ -93,12 +94,12 @@ LiveDoc/
 
 3. **First run** (saves code signatures):
    ```bash
-   livedoc --docs docs
+   python -m livedoc --docs docs
    ```
 
 4. **CI**: Add to your workflow:
    ```yaml
-   - run: pip install livedoc && livedoc --docs docs
+   - run: pip install living-doc && python -m livedoc --docs docs
    ```
 
 5. **Optional**: Add `.livedocignore` in project root (one pattern per line) to exclude paths:
@@ -114,7 +115,7 @@ LiveDoc/
 pip install -e .
 
 # Check links and freshness for the example (from repo root)
-python -m livedoc.cli examples --docs docs
+python -m livedoc examples --docs docs
 
 # First run saves code signatures to examples/.livedoc/code_signatures.json.
 # After changing a function/method signature, the next run will show
@@ -136,10 +137,10 @@ The workflow `.github/workflows/livedoc.yml` runs `livedoc check` on push and pu
 ```bash
 pip install build twine
 python -m build
-twine upload dist/*
+python -m twine upload dist/*
 ```
 
-Requires a PyPI account and token. First time: `twine upload dist/*` will prompt for credentials.
+Requires a PyPI account and token. Use `__token__` as username and your API token as password.
 
 ## Next Steps
 

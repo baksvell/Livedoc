@@ -18,7 +18,7 @@ A tool that links documentation to code so it stays up to date. When function si
 Recommended order:
 
 1. **Code ↔ documentation mapping format** — without it, you can't unambiguously link a doc paragraph to a code entity. Define this first.
-2. **Repository structure and stack** — one language for MVP (Python), shared architecture for future languages and IDE support.
+2. **Repository structure and stack** — Python and TypeScript/JavaScript for MVP, shared architecture for future languages and IDE support.
 3. **Prototype on one example** — one module, one doc page, code parser, and a check that "the document is outdated after a code change."
 
 In short: **first the format and structure, then a minimal prototype**.
@@ -39,7 +39,7 @@ In short: **first the format and structure, then a minimal prototype**.
 └─────────────────┘     └──────────────────┘
 ```
 
-- **Code parser**: extracts signatures (name, arguments, types) and unique identifiers (e.g., `module.function` or `file:line`).
+- **Code parser**: extracts signatures (name, arguments, types) and unique identifiers (e.g., `module.function` or `path.to.file:Class.method`). Supports **Python** and **TypeScript/JavaScript**.
 - **Doc parser**: parses Markdown with explicit anchors (see `spec/code-doc-mapping.md`), associating paragraphs/blocks with `code_id`.
 - **Link graph**: stores (code_id, doc_fragment_id) pairs. When code changes (new signature/hash), related fragments are marked as "possibly outdated."
 - **Change detector**: compares current code state (signatures/hashes) with the last saved state.
@@ -52,12 +52,16 @@ Extensibility: code and doc parsers are per-language plugins; the graph and repo
 - **Linking to code**: anchors in Markdown (see `spec/code-doc-mapping.md`), optionally plus annotations in code (docstring tags) that reference a fragment id.
 - **Site**: generate a static site (MkDocs, Docusaurus, or custom) from the same Markdown files; navigation and search on top of the generated site.
 
+## Supported Languages
+
+- **Python**: functions, class methods (`module.path:name` or `module.path:Class.method`)
+- **TypeScript/JavaScript**: functions, arrow functions, classes, methods (`.ts`, `.tsx`, `.js`, `.jsx`). Excludes `*.d.ts`, `*.test.*`, `*.spec.*`, `node_modules`, `dist`, `build`.
+
 ## MVP (First Iteration)
 
-- **Language**: Python
 - **Features**:
-  - Parse modules (functions, methods, signatures)
-  - One documentation page with anchors to those entities
+  - Parse modules (functions, methods, signatures) for Python and TypeScript/JavaScript
+  - Documentation page with anchors linking to code entities
   - Check: when a signature changes in code, the related doc paragraph is marked as outdated
 - **Extensibility**: abstractions for the code parser and anchor format to support more languages and IDE integration later.
 
@@ -75,8 +79,9 @@ LiveDoc/
 │       ├── parsers/         # Python code parser, doc parser
 │       └── report/          # "outdated" report, future site generation
 ├── tests/
-├── examples/                # sample project for testing MVP
-│   ├── sample_module/
+├── examples/                # sample project (Python + TypeScript)
+│   ├── sample_module/       # Python
+│   ├── ts_sample/           # TypeScript
 │   └── docs/
 └── pyproject.toml
 ```
@@ -91,6 +96,7 @@ LiveDoc/
    ## add
    Adds two numbers.
    ```
+   For TypeScript: `<!-- livedoc: code_id = "src.utils:add" -->` (path.to.file:name or path.to.file:Class.method)
 
 3. **First run** (saves code signatures):
    ```bash
@@ -132,7 +138,7 @@ LiveDoc/
 pip install -e .
 
 # Check links and freshness for the example (from repo root)
-python -m livedoc examples --docs docs
+python -m livedoc examples
 
 # First run saves code signatures to examples/.livedoc/code_signatures.json.
 # After changing a function/method signature, the next run will show

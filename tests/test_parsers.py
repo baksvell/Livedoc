@@ -12,6 +12,10 @@ from livedoc.parsers.python_parser import (
     parse_python_file,
     parse_python_module,
 )
+from livedoc.parsers.typescript_parser import (
+    parse_typescript_file,
+    parse_typescript_module,
+)
 
 
 EXAMPLES_ROOT = Path(__file__).resolve().parent.parent / "examples"
@@ -201,6 +205,46 @@ def test_parse_doc_file_empty() -> None:
         assert fragments == []
     finally:
         path.unlink()
+
+
+def test_parse_typescript_file() -> None:
+    utils = EXAMPLES_ROOT / "ts_sample" / "utils.ts"
+    root = EXAMPLES_ROOT
+    module_path = "ts_sample.utils"
+    entities = parse_typescript_file(utils, module_path)
+    code_ids = {e.code_id for e in entities}
+    assert "ts_sample.utils:add" in code_ids
+    assert "ts_sample.utils:subtract" in code_ids
+    assert "ts_sample.utils:multiply" in code_ids
+    assert "ts_sample.utils:Calculator.divide" in code_ids
+    assert "ts_sample.utils:createCalculator" in code_ids
+
+
+def test_parse_typescript_ignores_d_ts() -> None:
+    """*.d.ts files should be ignored."""
+    import tempfile
+    with tempfile.TemporaryDirectory() as d:
+        root = Path(d)
+        (root / "types.d.ts").write_text(
+            "export declare function foo(x: number): void;\n",
+            encoding="utf-8",
+        )
+        (root / "impl.ts").write_text(
+            "export function bar(): number { return 1; }\n",
+            encoding="utf-8",
+        )
+        entities = parse_typescript_module(root, root, ignore_patterns=())
+        code_ids = {e.code_id for e in entities}
+        assert "impl:bar" in code_ids
+        assert "types:foo" not in code_ids
+
+
+def test_parse_typescript_module() -> None:
+    root = EXAMPLES_ROOT
+    entities = parse_typescript_module(root, root, ignore_patterns=())
+    code_ids = {e.code_id for e in entities}
+    assert "ts_sample.utils:add" in code_ids
+    assert "ts_sample.utils:Calculator.divide" in code_ids
 
 
 def test_parse_doc_file_malformed_anchor() -> None:

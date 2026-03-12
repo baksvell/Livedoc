@@ -29,3 +29,20 @@
 
 - **Параметры:** `x`, `y` — числа.
 - **Возвращает:** произведение.
+
+---
+
+<!-- livedoc: code_id = "ts_sample.utils:add" -->
+## TypeScript utils.add
+
+Складывает два числа (TypeScript).
+
+- **Параметры:** `a`, `b` — числа.
+- **Возвращает:** сумму.
+
+---
+
+<!-- livedoc: code_id = "ts_sample.utils:Calculator.divide" -->
+## TypeScript Calculator.divide
+
+Делит a на b (TypeScript).

@@ -14,5 +14,25 @@
   "sample_module.calc:Calculator.divide": {
     "hash": "27ff9d28e084c5ad4e87ea79df5a5cb36707a33f3e478f466d495080b987b089",
     "sig": "divide(a, b) -> float"
+  },
+  "ts_sample.utils:add": {
+    "hash": "c151673ab16ebbb172ec74a6e78ff0a2c317a740f0bca3237db7fbf7b180432c",
+    "sig": "add(a, b) -> number"
+  },
+  "ts_sample.utils:subtract": {
+    "hash": "4e74bbfc99c809112739b6efcec4a60c447dab135a02ae5b98a42188a5bd0655",
+    "sig": "subtract(a, b) -> number"
+  },
+  "ts_sample.utils:createCalculator": {
+    "hash": "0755982a7cd32f7475a865c6c3d85755923ee0004ea95f11e9032e47554d30fa",
+    "sig": "createCalculator() -> Calculator"
+  },
+  "ts_sample.utils:multiply": {
+    "hash": "9128c648865a132dcded21e3a5efde09ce2e303dc64daa91ee0d163900c1be38",
+    "sig": "multiply(x, y)"
+  },
+  "ts_sample.utils:Calculator.divide": {
+    "hash": "759195207f8c6a57f69a231dc731fd0f2cc6b57330095acaaab0a9b83ad5060e",
+    "sig": "divide(a, b) -> number"
   }
 }

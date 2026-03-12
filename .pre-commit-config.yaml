@@ -1,0 +1,12 @@
+# Pre-commit hook for Living Documentation check
+# Install: pre-commit install
+# Run manually: pre-commit run livedoc --all-files
+
+repos:
+  - repo: local
+    hooks:
+      - id: livedoc
+        name: livedoc
+        entry: python -m livedoc examples --docs docs
+        language: system
+        pass_filenames: false

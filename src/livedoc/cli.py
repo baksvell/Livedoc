@@ -6,6 +6,7 @@ import argparse
 import sys
 from pathlib import Path
 
+from livedoc.config import load_config
 from livedoc.core.graph import DocGraph
 from livedoc.core.signatures import CodeSignatures
 from livedoc.parsers.doc_parser import parse_doc_anchors
@@ -119,8 +120,8 @@ def main() -> int:
     )
     parser.add_argument(
         "--docs",
-        default=DEFAULT_DOCS_DIR,
-        help=f"Documentation folder (default: {DEFAULT_DOCS_DIR})",
+        default=argparse.SUPPRESS,
+        help=f"Documentation folder (default: from config or {DEFAULT_DOCS_DIR})",
     )
     parser.add_argument(
         "--update",
@@ -137,12 +138,18 @@ def main() -> int:
     parser.add_argument(
         "--format",
         choices=("text", "json"),
-        default="text",
-        help="Output format: text (default) or json",
+        default=argparse.SUPPRESS,
+        help="Output format: text or json (default: from config or text)",
     )
     args = parser.parse_args()
-    ignore = tuple(args.ignore) if args.ignore else ()
-    return run_check(args.path, args.docs, args.update, ignore, args.format)
+    root = Path(args.path).resolve()
+    config = load_config(root)
+    docs = getattr(args, "docs", None) or config.get("docs", DEFAULT_DOCS_DIR)
+    output_format = getattr(args, "format", None) or config.get("format", "text")
+    ignore_cli = tuple(args.ignore) if args.ignore else ()
+    ignore_config = tuple(config.get("ignore", []))
+    ignore = ignore_config + ignore_cli
+    return run_check(args.path, docs, args.update, ignore, output_format)
 
 
 if __name__ == "__main__":

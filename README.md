@@ -102,11 +102,28 @@ LiveDoc/
    - run: pip install living-doc && python -m livedoc --docs docs
    ```
 
-5. **Optional**: Add `.livedocignore` in project root (one pattern per line) to exclude paths:
+5. **Optional**: Add `.livedoc.json` in project root for defaults:
+   ```json
+   {"docs": "docs", "ignore": ["build"], "format": "text"}
+   ```
+
+6. **Optional**: Add `.livedocignore` (one pattern per line) to exclude paths:
    ```
    build
    scripts
    ```
+
+7. **Optional**: Pre-commit hook — add to `.pre-commit-config.yaml`:
+   ```yaml
+   - repo: local
+     hooks:
+       - id: livedoc
+         name: livedoc
+         entry: python -m livedoc
+         language: system
+         pass_filenames: false
+   ```
+   Then: `pip install pre-commit && pre-commit install`
 
 ## Running the MVP (This Repo)
 
@@ -122,9 +139,12 @@ python -m livedoc examples --docs docs
 # related doc fragments as "possibly outdated" with a diff of old vs new signature.
 # To update signatures after editing docs: --update
 
-# Options:
-#   --ignore PATTERN   Exclude paths (e.g. --ignore mytests, can be repeated)
+# Pre-commit (this repo): pre-commit install && pre-commit run livedoc
+
+# Options (CLI overrides .livedoc.json):
+#   --ignore PATTERN   Exclude paths (can be repeated)
 #   --format json      Machine-readable output for CI/scripts
+#   .livedoc.json      Config: docs, ignore, format
 #   .livedocignore     File with ignore patterns (one per line)
 ```
 

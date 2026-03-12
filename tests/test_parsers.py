@@ -118,3 +118,100 @@ def test_report_outdated_with_changes() -> None:
     assert "add(a, b) -> int" in report
     assert "add(a, b, c) -> int" in report
     assert "m:add" in report
+
+
+def test_report_outdated_json_format() -> None:
+    from livedoc.core.graph import DocFragment
+    from livedoc.report.reporter import report_outdated
+
+    f = DocFragment("api.md#add", Path("api.md"), 5, ["m:add"], "add")
+    changes = {"m:add": ("add(a)", "add(a, b)")}
+    report = report_outdated([f], changes=changes, output_format="json")
+    assert '"ok": false' in report
+    assert "api.md#add" in report
+    assert "m:add" in report
+
+
+def test_report_up_to_date_json() -> None:
+    from livedoc.report.reporter import report_outdated
+
+    report = report_outdated([], output_format="json")
+    assert '"ok": true' in report
+    assert '"outdated": []' in report
+
+
+def test_config_load() -> None:
+    import tempfile
+    from livedoc.config import load_config
+
+    with tempfile.TemporaryDirectory() as d:
+        root = Path(d)
+        config_path = root / ".livedoc.json"
+        config_path.write_text(
+            '{"docs": "mydocs", "ignore": ["build"], "format": "json"}',
+            encoding="utf-8",
+        )
+        config = load_config(root)
+        assert config["docs"] == "mydocs"
+        assert config["ignore"] == ["build"]
+        assert config["format"] == "json"
+
+
+def test_config_load_empty_missing() -> None:
+    from livedoc.config import load_config
+
+    config = load_config(Path("/nonexistent"))
+    assert config == {}
+
+
+def test_config_load_invalid_json() -> None:
+    import tempfile
+    from livedoc.config import load_config
+
+    with tempfile.TemporaryDirectory() as d:
+        root = Path(d)
+        (root / ".livedoc.json").write_text("not json {", encoding="utf-8")
+        config = load_config(root)
+        assert config == {}
+
+
+def test_code_entity_format_signature() -> None:
+    from livedoc.core.signatures import CodeEntity
+
+    e = CodeEntity(
+        code_id="m:add",
+        name="add",
+        args=["a", "b"],
+        return_annotation="int",
+        file_path=Path("x.py"),
+        line=1,
+    )
+    assert e.format_signature() == "add(a, b) -> int"
+
+
+def test_parse_doc_file_empty() -> None:
+    import tempfile
+    from livedoc.parsers.doc_parser import parse_doc_file
+
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".md", delete=False) as f:
+        f.write("# No anchors here\n")
+        path = Path(f.name)
+    try:
+        fragments = parse_doc_file(path, path.parent)
+        assert fragments == []
+    finally:
+        path.unlink()
+
+
+def test_parse_doc_file_malformed_anchor() -> None:
+    import tempfile
+    from livedoc.parsers.doc_parser import parse_doc_file
+
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".md", delete=False) as f:
+        f.write('<!-- livedoc: code_id = "" -->\n## Empty\n')
+        path = Path(f.name)
+    try:
+        fragments = parse_doc_file(path, path.parent)
+        assert len(fragments) == 0
+    finally:
+        path.unlink()

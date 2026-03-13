@@ -2,6 +2,13 @@
  * TypeScript utilities for LiveDoc demo.
  */
 
+export interface Point {
+  x: number;
+  y: number;
+}
+
+export type UserId = string;
+
 export function add(a: number, b: number): number {
   return a + b;
 }
@@ -16,6 +23,10 @@ export class Calculator {
   divide(a: number, b: number): number {
     return a / b;
   }
+}
+
+export function greet({ name }: { name: string }): string {
+  return `Hello, ${name}`;
 }
 
 export default function createCalculator(): Calculator {

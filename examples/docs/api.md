@@ -46,3 +46,17 @@
 ## TypeScript Calculator.divide
 
 Делит a на b (TypeScript).
+
+---
+
+<!-- livedoc: code_id = "calc:Add" -->
+## Go calc.Add
+
+Складывает два целых числа (Go).
+
+---
+
+<!-- livedoc: code_id = "calc:(*Calculator).Multiply" -->
+## Go Calculator.Multiply
+
+Умножает x на y (Go).

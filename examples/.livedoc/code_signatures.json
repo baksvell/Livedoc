@@ -23,6 +23,10 @@
     "hash": "4e74bbfc99c809112739b6efcec4a60c447dab135a02ae5b98a42188a5bd0655",
     "sig": "subtract(a, b) -> number"
   },
+  "ts_sample.utils:greet": {
+    "hash": "d5eb043d280a7fda23a11d8bb2202f67bea9fd4ccd42fd0335264e23ff490672",
+    "sig": "greet(name) -> string"
+  },
   "ts_sample.utils:createCalculator": {
     "hash": "0755982a7cd32f7475a865c6c3d85755923ee0004ea95f11e9032e47554d30fa",
     "sig": "createCalculator() -> Calculator"
@@ -34,5 +38,29 @@
   "ts_sample.utils:Calculator.divide": {
     "hash": "759195207f8c6a57f69a231dc731fd0f2cc6b57330095acaaab0a9b83ad5060e",
     "sig": "divide(a, b) -> number"
+  },
+  "ts_sample.utils:Point": {
+    "hash": "3599b81ea8896e2e3852bfe661b5520dc61add7db7a20f1a70e0acb17fc83f20",
+    "sig": "Point(x, y) -> interface"
+  },
+  "ts_sample.utils:UserId": {
+    "hash": "058c98ef88b27e3c33a5bbd5a7369c3330b4cf74893cf249345fa1940280b7aa",
+    "sig": "UserId() -> string"
+  },
+  "calc:(*Calculator).Multiply": {
+    "hash": "e1e9284c9a8170744969e0243396e8135a4a030d516a447ba05c2bd99480af50",
+    "sig": "Multiply(x, y) -> int"
+  },
+  "calc:Calculator.Divide": {
+    "hash": "aa442135aca658735d6b20df5ed735c7334aa0f147da28569684190d1d4892cf",
+    "sig": "Divide(a, b) -> int"
+  },
+  "calc:Add": {
+    "hash": "fc5f2399c23e0ca56a98e0400f91d56e41c6a0c1a2ba863386c5c0f305be70cc",
+    "sig": "Add(a, b) -> int"
+  },
+  "calc:Subtract": {
+    "hash": "f4c6875a0b1d7df90d3937a8c0daa4945d670b2559b0aea2c463cd8b106ade20",
+    "sig": "Subtract(a, b) -> int"
   }
 }

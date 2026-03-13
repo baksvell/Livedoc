@@ -2,6 +2,22 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.1.3] - 2025-02-09
+
+### Added
+
+- **Go support**: parse `.go` files (functions and methods)
+  - Code ID format: `package:FunctionName` or `package:(*Type).Method` or `package:Type.Method`
+  - Exclude `vendor`, `*_test.go`
+- **TypeScript improvements**: interfaces, type aliases, destructuring in params
+- Example `examples/go_sample/` with Go code
+- Tests for Go parser
+
+### Changed
+
+- CLI now parses Python, TypeScript/JavaScript, and Go automatically
+- README and spec updated with Go format
+
 ## [0.1.2] - 2025-02-09
 
 ### Added

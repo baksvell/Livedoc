@@ -19,8 +19,8 @@
 
 ### Расширение на другие языки
 
-- **JavaScript/TypeScript**: `{file_path}:{export_name}` или `{file_path}:{ClassName.methodName}`
-- **Go**: `{package}:{FunctionName}` или `{package}:{(*Type).Method}`
+- **JavaScript/TypeScript**: `{file_path}:{export_name}` или `{file_path}:{ClassName.methodName}` или `{file_path}:{InterfaceName}` или `{file_path}:{TypeName}` (для type alias)
+- **Go**: `{package}:{FunctionName}` или `{package}:{(*Type).Method}` или `{package}:{Type.Method}` (метод по значению)
 - И т.д. — парсер каждого языка выдаёт свой формат code_id, но в графе связей они хранятся как строки.
 
 ## 2. Анкоры в документации

@@ -21,6 +21,24 @@ def _path_to_module(root: Path, file_path: Path) -> str:
     return ".".join(parts)
 
 
+def _normalize_param(param: str) -> str:
+    """Extract effective param name from destructuring, rest, etc."""
+    param = param.strip()
+    if param.startswith("..."):
+        return param
+    if param.startswith("{"):
+        idx = param.find("}")
+        inner = (param[1:idx] if idx > 0 else param[1:]).strip()
+        if ":" in inner:
+            parts = re.split(r"\s*,\s*", inner)
+            return parts[0].split(":")[0].strip() if parts else "?"
+        return inner.split(",")[0].strip().split(":")[0].strip() if inner else "?"
+    if param.startswith("["):
+        inner = param[1 : param.rfind("]")].strip()
+        return inner.split(",")[0].strip() if inner else "?"
+    return param.split(":")[0].strip().split("=")[0].strip()
+
+
 def _extract_args_from_parens(s: str) -> list[str]:
     """Extract param names from function(params) string, handling nested parens."""
     args: list[str] = []
@@ -56,7 +74,7 @@ def _find_functions(source: str, module_path: str, file_path: Path) -> list[Code
         name = m.group(1)
         args_str = m.group(2) or ""
         ret = (m.group(3) or "").strip() if m.group(3) else ""
-        args = [p.split(":")[0].strip().split("=")[0].strip() for p in re.split(r"\s*,\s*", args_str) if p.strip()]
+        args = [_normalize_param(p) for p in re.split(r"\s*,\s*", args_str) if p.strip()]
         line = source[: m.start()].count("\n") + 1
         entities.append(
             CodeEntity(
@@ -73,7 +91,7 @@ def _find_functions(source: str, module_path: str, file_path: Path) -> list[Code
     for m in re.finditer(pattern2, source):
         name = m.group(1)
         args_str = m.group(2) or ""
-        args = [p.split(":")[0].strip().split("=")[0].strip() for p in re.split(r"\s*,\s*", args_str) if p.strip()]
+        args = [_normalize_param(p) for p in re.split(r"\s*,\s*", args_str) if p.strip()]
         line = source[: m.start()].count("\n") + 1
         entities.append(
             CodeEntity(
@@ -113,7 +131,7 @@ def _find_classes_and_methods(source: str, module_path: str, file_path: Path) ->
                 continue
             args_str = m.group(2) or ""
             ret = (m.group(3) or "").strip() if m.group(3) else ""
-            args = [p.split(":")[0].strip().split("=")[0].strip() for p in re.split(r"\s*,\s*", args_str) if p.strip()]
+            args = [_normalize_param(p) for p in re.split(r"\s*,\s*", args_str) if p.strip()]
             if "this" in args:
                 args = [a for a in args if a != "this"]
             body_start = class_match.start() + len(class_match.group(0)) + m.start()
@@ -131,12 +149,93 @@ def _find_classes_and_methods(source: str, module_path: str, file_path: Path) ->
     return entities
 
 
+def _find_interfaces(source: str, module_path: str, file_path: Path) -> list[CodeEntity]:
+    """Find interface declarations: interface Name { ... }."""
+    entities: list[CodeEntity] = []
+    pattern = r"(?:export\s+)?interface\s+(\w+)(?:\s+extends\s+[\w\s,]+)?\s*\{"
+    for m in re.finditer(pattern, source):
+        name = m.group(1)
+        start = m.end()
+        brace_depth = 1
+        i = start
+        while i < len(source) and brace_depth > 0:
+            if source[i] == "{":
+                brace_depth += 1
+            elif source[i] == "}":
+                brace_depth -= 1
+            i += 1
+        body = source[start : i - 1]
+        # Extract property names: "name: Type" or "readonly name: Type" or "name?: Type"
+        props = re.findall(r"(?:readonly\s+)?(\w+)\s*\??\s*[:=]", body)
+        line = source[: m.start()].count("\n") + 1
+        entities.append(
+            CodeEntity(
+                code_id=f"{module_path}:{name}",
+                name=name,
+                args=props,
+                return_annotation="interface",
+                file_path=file_path,
+                line=line,
+            )
+        )
+    return entities
+
+
+def _find_type_aliases(source: str, module_path: str, file_path: Path) -> list[CodeEntity]:
+    """Find type alias declarations: type Name = ..."""
+    entities: list[CodeEntity] = []
+    # type Name = ... (until ; or newline or next declaration)
+    pattern = r"(?:export\s+)?type\s+(\w+)\s*=\s*"
+    for m in re.finditer(pattern, source):
+        name = m.group(1)
+        rest = source[m.end() :]
+        # Extract type expression: balance braces/parens, stop at ; or \n\n or next keyword
+        depth = 0
+        in_brace, in_paren, in_bracket = 0, 0, 0
+        i = 0
+        while i < len(rest):
+            c = rest[i]
+            if c == "{":
+                in_brace += 1
+            elif c == "}":
+                in_brace -= 1
+            elif c == "(":
+                in_paren += 1
+            elif c == ")":
+                in_paren -= 1
+            elif c == "[":
+                in_bracket += 1
+            elif c == "]":
+                in_bracket -= 1
+            elif c == ";" and in_brace == in_paren == in_bracket == 0:
+                break
+            elif c == "\n" and in_brace == in_paren == in_bracket == 0:
+                break
+            i += 1
+        type_expr = rest[:i].strip()
+        type_expr = re.sub(r"\s+", " ", type_expr)[:200]
+        line = source[: m.start()].count("\n") + 1
+        entities.append(
+            CodeEntity(
+                code_id=f"{module_path}:{name}",
+                name=name,
+                args=[],
+                return_annotation=type_expr,
+                file_path=file_path,
+                line=line,
+            )
+        )
+    return entities
+
+
 def parse_typescript_file(file_path: Path, module_path: str) -> list[CodeEntity]:
     """Parse one .ts/.tsx/.js/.jsx file and return entities."""
     source = file_path.read_text(encoding="utf-8")
     entities: list[CodeEntity] = []
     entities.extend(_find_functions(source, module_path, file_path))
     entities.extend(_find_classes_and_methods(source, module_path, file_path))
+    entities.extend(_find_interfaces(source, module_path, file_path))
+    entities.extend(_find_type_aliases(source, module_path, file_path))
     return entities
 
 

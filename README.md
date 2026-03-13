@@ -39,7 +39,7 @@ In short: **first the format and structure, then a minimal prototype**.
 └─────────────────┘     └──────────────────┘
 ```
 
-- **Code parser**: extracts signatures (name, arguments, types) and unique identifiers (e.g., `module.function` or `path.to.file:Class.method`). Supports **Python** and **TypeScript/JavaScript**.
+- **Code parser**: extracts signatures (name, arguments, types) and unique identifiers. Supports **Python**, **TypeScript/JavaScript**, and **Go**.
 - **Doc parser**: parses Markdown with explicit anchors (see `spec/code-doc-mapping.md`), associating paragraphs/blocks with `code_id`.
 - **Link graph**: stores (code_id, doc_fragment_id) pairs. When code changes (new signature/hash), related fragments are marked as "possibly outdated."
 - **Change detector**: compares current code state (signatures/hashes) with the last saved state.
@@ -55,7 +55,8 @@ Extensibility: code and doc parsers are per-language plugins; the graph and repo
 ## Supported Languages
 
 - **Python**: functions, class methods (`module.path:name` or `module.path:Class.method`)
-- **TypeScript/JavaScript**: functions, arrow functions, classes, methods (`.ts`, `.tsx`, `.js`, `.jsx`). Excludes `*.d.ts`, `*.test.*`, `*.spec.*`, `node_modules`, `dist`, `build`.
+- **TypeScript/JavaScript**: functions, arrow functions, classes, methods, interfaces, type aliases (`.ts`, `.tsx`, `.js`, `.jsx`). Supports destructuring params. Excludes `*.d.ts`, `*.test.*`, `*.spec.*`, `node_modules`, `dist`, `build`.
+- **Go**: functions and methods (`.go`). Format: `package:FunctionName` or `package:(*Type).Method`. Excludes `vendor`, `*_test.go`.
 
 ## MVP (First Iteration)
 
@@ -79,9 +80,10 @@ LiveDoc/
 │       ├── parsers/         # Python code parser, doc parser
 │       └── report/          # "outdated" report, future site generation
 ├── tests/
-├── examples/                # sample project (Python + TypeScript)
+├── examples/                # sample project (Python + TypeScript + Go)
 │   ├── sample_module/       # Python
 │   ├── ts_sample/           # TypeScript
+│   ├── go_sample/           # Go
 │   └── docs/
 └── pyproject.toml
 ```

@@ -16,6 +16,7 @@ from livedoc.parsers.typescript_parser import (
     parse_typescript_file,
     parse_typescript_module,
 )
+from livedoc.parsers.go_parser import parse_go_file, parse_go_module
 
 
 EXAMPLES_ROOT = Path(__file__).resolve().parent.parent / "examples"
@@ -218,6 +219,52 @@ def test_parse_typescript_file() -> None:
     assert "ts_sample.utils:multiply" in code_ids
     assert "ts_sample.utils:Calculator.divide" in code_ids
     assert "ts_sample.utils:createCalculator" in code_ids
+    assert "ts_sample.utils:Point" in code_ids
+    assert "ts_sample.utils:UserId" in code_ids
+    assert "ts_sample.utils:greet" in code_ids
+    point = next(e for e in entities if e.code_id == "ts_sample.utils:Point")
+    assert "x" in point.args and "y" in point.args
+    greet_ent = next(e for e in entities if e.code_id == "ts_sample.utils:greet")
+    assert "name" in greet_ent.args
+
+
+def test_parse_go_file() -> None:
+    calc = EXAMPLES_ROOT / "go_sample" / "calc.go"
+    entities = parse_go_file(calc, "calc")
+    code_ids = {e.code_id for e in entities}
+    assert "calc:Add" in code_ids
+    assert "calc:Subtract" in code_ids
+    assert "calc:(*Calculator).Multiply" in code_ids
+    assert "calc:Calculator.Divide" in code_ids
+    add_ent = next(e for e in entities if e.code_id == "calc:Add")
+    assert "a" in add_ent.args and "b" in add_ent.args
+
+
+def test_parse_go_module() -> None:
+    root = EXAMPLES_ROOT
+    entities = parse_go_module(root, root, ignore_patterns=())
+    code_ids = {e.code_id for e in entities}
+    assert "calc:Add" in code_ids
+    assert "calc:(*Calculator).Multiply" in code_ids
+
+
+def test_parse_go_ignores_test_files() -> None:
+    """*_test.go files should be ignored."""
+    import tempfile
+    with tempfile.TemporaryDirectory() as d:
+        root = Path(d)
+        (root / "calc.go").write_text(
+            "package calc\n\nfunc Add(a, b int) int { return a + b }\n",
+            encoding="utf-8",
+        )
+        (root / "calc_test.go").write_text(
+            "package calc\n\nfunc TestAdd(t *testing.T) {}\n",
+            encoding="utf-8",
+        )
+        entities = parse_go_module(root, root, ignore_patterns=())
+        code_ids = {e.code_id for e in entities}
+        assert "calc:Add" in code_ids
+        assert "calc:TestAdd" not in code_ids
 
 
 def test_parse_typescript_ignores_d_ts() -> None:

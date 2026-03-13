@@ -15,6 +15,7 @@ from livedoc.parsers.python_parser import (
     parse_python_module,
 )
 from livedoc.parsers.typescript_parser import parse_typescript_module
+from livedoc.parsers.go_parser import parse_go_module
 from livedoc.report.reporter import report_outdated
 
 
@@ -54,7 +55,7 @@ def run_check(
         print(f"Documentation folder not found: {docs_path}", file=sys.stderr)
         return 2
 
-    # Parse code (Python + TypeScript/JavaScript)
+    # Parse code (Python + TypeScript/JavaScript + Go)
     from livedoc.parsers.python_parser import DEFAULT_IGNORE
 
     ignore = list(DEFAULT_IGNORE)
@@ -64,6 +65,7 @@ def run_check(
     ignore_tuple = tuple(ignore)
     entities = parse_python_module(root, code_path, ignore_patterns=ignore_tuple)
     entities.extend(parse_typescript_module(root, code_path, ignore_tuple))
+    entities.extend(parse_go_module(root, code_path, ignore_tuple))
     current_sigs = build_current_signatures(entities)
     entities_by_id = {e.code_id: e for e in entities}
     current_readable = {e.code_id: e.format_signature() for e in entities}

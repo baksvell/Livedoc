@@ -2,6 +2,17 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.1.4] - 2025-02-09
+
+### Added
+
+- **Anchor validation**: `code_id` in Markdown anchors must exist in parsed code; unknown references fail the check (exit 1) and appear under **Unknown code_id references** / JSON `unknown_anchors`
+- **Code locations in reports**: outdated-doc text report includes `Code: path:line` (relative to project root); JSON `code_changes` includes `code_file` and `code_line`; hint when symbol was removed from codebase
+
+### Changed
+
+- README and spec updated for validation and code locations
+
 ## [0.1.3] - 2025-02-09
 
 ### Added

@@ -44,3 +44,19 @@ class DocGraph:
                     seen.add(fragment.doc_fragment_id)
                     outdated.append(fragment)
         return outdated
+
+
+def find_unknown_anchor_refs(
+    fragments: list[DocFragment],
+    known_code_ids: set[str],
+) -> list[tuple[str, DocFragment]]:
+    """
+    Return (code_id, fragment) for each anchor that references code_id
+    not present in known_code_ids (parsed code entities).
+    """
+    result: list[tuple[str, DocFragment]] = []
+    for fragment in fragments:
+        for code_id in fragment.code_ids:
+            if code_id not in known_code_ids:
+                result.append((code_id, fragment))
+    return result

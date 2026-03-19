@@ -156,6 +156,14 @@ python -m livedoc examples
 #   .livedocignore     File with ignore patterns (one per line)
 ```
 
+## Anchor validation
+
+Every `code_id` in a livedoc anchor must match a symbol parsed from your project (Python, TypeScript/JavaScript, Go). If an anchor points to a missing or mistyped id, the check fails with **Unknown code_id references** (exit code 1). The JSON report includes an `unknown_anchors` array.
+
+## Code locations in reports
+
+When documentation is outdated because a linked symbol changed, the text report includes a **Code:** line with the file path (relative to the project root) and line number of the current definition, e.g. `sample_module/calc.py:6`. JSON entries under `code_changes` include `code_file` and `code_line`. If the symbol was removed from the codebase, the report says `(symbol removed from codebase)` instead.
+
 ## CI (GitHub Actions)
 
 The workflow `.github/workflows/livedoc.yml` runs `livedoc check` on push and pull requests. The `examples/.livedoc` folder with signatures is committed so CI has a baseline. If code changes without updating docs or without `--update`, the job fails.

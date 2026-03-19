@@ -114,27 +114,69 @@ def test_load_livedocignore() -> None:
 
 
 def test_report_outdated_with_changes() -> None:
+    import tempfile
     from livedoc.core.graph import DocFragment
+    from livedoc.core.signatures import CodeEntity
     from livedoc.report.reporter import report_outdated
 
-    f = DocFragment("api.md#add", Path("api.md"), 5, ["m:add"], "add")
-    changes = {"m:add": ("add(a, b) -> int", "add(a, b, c) -> int")}
-    report = report_outdated([f], changes=changes)
+    with tempfile.TemporaryDirectory() as d:
+        root = Path(d)
+        code_file = root / "calc.py"
+        code_file.write_text("def add(): pass\n", encoding="utf-8")
+        f = DocFragment("api.md#add", Path("api.md"), 5, ["m:add"], "add")
+        changes = {"m:add": ("add(a, b) -> int", "add(a, b, c) -> int")}
+        entities = {
+            "m:add": CodeEntity(
+                code_id="m:add",
+                name="add",
+                args=["a", "b", "c"],
+                return_annotation="int",
+                file_path=code_file,
+                line=12,
+            )
+        }
+        report = report_outdated([f], changes=changes, entities_by_id=entities, project_root=root)
     assert "add(a, b) -> int" in report
     assert "add(a, b, c) -> int" in report
     assert "m:add" in report
+    assert "calc.py:12" in report
+    assert "Code:" in report
 
 
 def test_report_outdated_json_format() -> None:
+    import tempfile
     from livedoc.core.graph import DocFragment
+    from livedoc.core.signatures import CodeEntity
     from livedoc.report.reporter import report_outdated
 
-    f = DocFragment("api.md#add", Path("api.md"), 5, ["m:add"], "add")
-    changes = {"m:add": ("add(a)", "add(a, b)")}
-    report = report_outdated([f], changes=changes, output_format="json")
+    with tempfile.TemporaryDirectory() as d:
+        root = Path(d)
+        cf = root / "m.py"
+        cf.write_text("x", encoding="utf-8")
+        f = DocFragment("api.md#add", Path("api.md"), 5, ["m:add"], "add")
+        changes = {"m:add": ("add(a)", "add(a, b)")}
+        entities = {
+            "m:add": CodeEntity(
+                code_id="m:add",
+                name="add",
+                args=["a", "b"],
+                return_annotation="",
+                file_path=cf,
+                line=7,
+            )
+        }
+        report = report_outdated(
+            [f],
+            changes=changes,
+            entities_by_id=entities,
+            project_root=root,
+            output_format="json",
+        )
     assert '"ok": false' in report
     assert "api.md#add" in report
     assert "m:add" in report
+    assert '"code_file": "m.py"' in report
+    assert '"code_line": 7' in report
 
 
 def test_report_up_to_date_json() -> None:
@@ -143,6 +185,49 @@ def test_report_up_to_date_json() -> None:
     report = report_outdated([], output_format="json")
     assert '"ok": true' in report
     assert '"outdated": []' in report
+    assert '"unknown_anchors": []' in report
+
+
+def test_find_unknown_anchor_refs() -> None:
+    from livedoc.core.graph import DocFragment, find_unknown_anchor_refs
+
+    f = DocFragment("api.md#x", Path("api.md"), 1, ["known:id", "missing:func"], "x")
+    refs = find_unknown_anchor_refs([f], {"known:id"})
+    assert len(refs) == 1
+    assert refs[0][0] == "missing:func"
+    assert refs[0][1] == f
+
+
+def test_report_unknown_anchors_text() -> None:
+    from livedoc.core.graph import DocFragment
+    from livedoc.report.reporter import report_outdated
+
+    f = DocFragment("api.md#bad", Path("api.md"), 3, ["nope:missing"], "Bad")
+    report = report_outdated([], unknown_refs=[("nope:missing", f)])
+    assert "Unknown code_id" in report
+    assert "nope:missing" in report
+    assert "api.md" in report
+
+
+def test_report_outdated_removed_symbol_shows_hint() -> None:
+    from livedoc.core.graph import DocFragment
+    from livedoc.report.reporter import report_outdated
+
+    f = DocFragment("api.md#gone", Path("api.md"), 1, ["m:gone"], "gone")
+    changes = {"m:gone": ("gone() -> void", None)}
+    report = report_outdated([f], changes=changes, entities_by_id={})
+    assert "removed from codebase" in report
+
+
+def test_report_unknown_anchors_json() -> None:
+    from livedoc.core.graph import DocFragment
+    from livedoc.report.reporter import report_outdated
+
+    f = DocFragment("api.md#bad", Path("api.md"), 3, ["x"], "Bad")
+    report = report_outdated([], unknown_refs=[("ghost:fn", f)], output_format="json")
+    assert '"ok": false' in report
+    assert "ghost:fn" in report
+    assert "unknown_anchors" in report
 
 
 def test_config_load() -> None:

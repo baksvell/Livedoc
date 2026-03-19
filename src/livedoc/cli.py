@@ -7,7 +7,7 @@ import sys
 from pathlib import Path
 
 from livedoc.config import load_config
-from livedoc.core.graph import DocGraph
+from livedoc.core.graph import DocGraph, find_unknown_anchor_refs
 from livedoc.core.signatures import CodeSignatures
 from livedoc.parsers.doc_parser import parse_doc_anchors
 from livedoc.parsers.python_parser import (
@@ -46,7 +46,7 @@ def run_check(
 ) -> int:
     """
     Build code↔doc graph, compare signatures, output outdated fragments.
-    Returns 1 if outdated, 0 if up to date.
+    Returns 1 if outdated or unknown anchors, 0 if up to date, 2 on error.
     """
     root = project_root.resolve()
     code_path = root
@@ -77,6 +77,8 @@ def run_check(
         for code_id in f.code_ids:
             graph.add_link(code_id, f)
 
+    unknown_refs = find_unknown_anchor_refs(fragments, set(current_sigs.keys()))
+
     # Load stored signatures
     sig_path = root / SIGNATURES_FILE
     stored = CodeSignatures.load(sig_path)
@@ -86,6 +88,17 @@ def run_check(
         cs = CodeSignatures(current_sigs, readable=current_readable)
         cs.save(sig_path, readable=current_readable)
         print("First run: code signatures saved. Future code changes will mark linked docs as outdated.")
+        if unknown_refs:
+            report = report_outdated(
+                [],
+                changes={},
+                unknown_refs=unknown_refs,
+                entities_by_id=entities_by_id,
+                project_root=root,
+                output_format=output_format,
+            )
+            print(report)
+            return 1
         return 0
 
     changed = stored.changed_code_ids(current_sigs)
@@ -106,10 +119,17 @@ def run_check(
         cs.save(sig_path, readable=current_readable)
         print("Code signatures updated.")
 
-    report = report_outdated(outdated, changes=changes, output_format=output_format)
+    report = report_outdated(
+        outdated,
+        changes=changes,
+        unknown_refs=unknown_refs,
+        entities_by_id=entities_by_id,
+        project_root=root,
+        output_format=output_format,
+    )
     print(report)
 
-    if outdated:
+    if outdated or unknown_refs:
         return 1
     return 0
 

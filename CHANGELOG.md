@@ -2,7 +2,7 @@
 
 All notable changes to this project will be documented in this file.
 
-## [0.1.4] - 2025-02-09
+## [0.1.4] - 2026-03-20
 
 ### Added
 
@@ -13,7 +13,7 @@ All notable changes to this project will be documented in this file.
 
 - README and spec updated for validation and code locations
 
-## [0.1.3] - 2025-02-09
+## [0.1.3] - 2026-03-15
 
 ### Added
 
@@ -29,7 +29,7 @@ All notable changes to this project will be documented in this file.
 - CLI now parses Python, TypeScript/JavaScript, and Go automatically
 - README and spec updated with Go format
 
-## [0.1.2] - 2025-02-09
+## [0.1.2] - 2026-03-08
 
 ### Added
 
@@ -47,7 +47,7 @@ All notable changes to this project will be documented in this file.
 - README updated with Supported Languages section and TypeScript examples
 - pyproject.toml: license to SPDX format, keywords for typescript/javascript
 
-## [0.1.1] - 2024
+## [0.1.1] - 2026-03-01
 
 ### Added
 

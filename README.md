@@ -105,10 +105,7 @@ LiveDoc/
    python -m livedoc --docs docs
    ```
 
-4. **CI**: Add to your workflow:
-   ```yaml
-   - run: pip install living-doc && python -m livedoc --docs docs
-   ```
+4. **CI**: See [GitHub Actions in your project](#github-actions-in-your-project) for a full workflow you can copy.
 
 5. **Optional**: Add `.livedoc.json` in project root for defaults:
    ```json
@@ -156,6 +153,58 @@ python -m livedoc examples
 #   .livedocignore     File with ignore patterns (one per line)
 ```
 
+## GitHub Actions in your project
+
+Use the published package from [PyPI](https://pypi.org/project/living-doc/) so CI matches what developers install locally.
+
+### Prerequisites
+
+1. Add `livedoc` anchors to your Markdown under the folder you pass as `--docs` (often `docs/`).
+2. Run **once locally** from the repository root:  
+   `pip install living-doc && python -m livedoc . --docs docs`  
+   (adjust `--docs` if your folder differs, or set `"docs": "docs"` in `.livedoc.json` and run `python -m livedoc .`).
+3. **Commit** `.livedoc/code_signatures.json` (created on first run). CI compares future commits to this baseline; without it, the first CI run only saves signatures and passes.
+
+### Example workflow
+
+Save as `.github/workflows/livedoc.yml` in **your** repository:
+
+```yaml
+name: Living documentation
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+
+jobs:
+  livedoc:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install living-doc
+        run: pip install living-doc
+
+      - name: Check doc freshness and anchors
+        run: python -m livedoc . --docs docs
+```
+
+- Replace `docs` with your docs directory if needed, or rely on `.livedoc.json` (`"docs": "..."`) and use `python -m livedoc .`.
+- To **pin** the version: `pip install "living-doc==0.1.4"`.
+- For **machine-readable** logs: add `--format json` or set `"format": "json"` in `.livedoc.json` (e.g. to parse in a follow-up step).
+
+### When CI fails
+
+- **Outdated docs**: update the Markdown or run `python -m livedoc . --docs docs --update` after intentional API changes, then commit the updated `.livedoc/code_signatures.json`.
+- **Unknown anchors**: fix or remove invalid `code_id` values in Markdown (see [Anchor validation](#anchor-validation)).
+
 ## Anchor validation
 
 Every `code_id` in a livedoc anchor must match a symbol parsed from your project (Python, TypeScript/JavaScript, Go). If an anchor points to a missing or mistyped id, the check fails with **Unknown code_id references** (exit code 1). The JSON report includes an `unknown_anchors` array.
@@ -164,9 +213,9 @@ Every `code_id` in a livedoc anchor must match a symbol parsed from your project
 
 When documentation is outdated because a linked symbol changed, the text report includes a **Code:** line with the file path (relative to the project root) and line number of the current definition, e.g. `sample_module/calc.py:6`. JSON entries under `code_changes` include `code_file` and `code_line`. If the symbol was removed from the codebase, the report says `(symbol removed from codebase)` instead.
 
-## CI (GitHub Actions)
+## CI in this repository
 
-The workflow `.github/workflows/livedoc.yml` runs `livedoc check` on push and pull requests. The `examples/.livedoc` folder with signatures is committed so CI has a baseline. If code changes without updating docs or without `--update`, the job fails.
+The workflow [`.github/workflows/livedoc.yml`](.github/workflows/livedoc.yml) installs **this repo in editable mode** (`pip install -e .`) and runs `python -m livedoc examples --docs docs` so CI always uses the current source. The committed [`examples/.livedoc/code_signatures.json`](examples/.livedoc/code_signatures.json) is the baseline; if example code changes without updating docs or signatures, the job fails.
 
 ## Publishing to PyPI
 

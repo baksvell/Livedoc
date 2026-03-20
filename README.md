@@ -18,7 +18,7 @@ A tool that links documentation to code so it stays up to date. When function si
 Recommended order:
 
 1. **Code ↔ documentation mapping format** — without it, you can't unambiguously link a doc paragraph to a code entity. Define this first.
-2. **Repository structure and stack** — Python and TypeScript/JavaScript for MVP, shared architecture for future languages and IDE support.
+2. **Repository structure and stack** — Python, TypeScript/JavaScript, and Go for MVP, shared architecture for future languages and IDE support.
 3. **Prototype on one example** — one module, one doc page, code parser, and a check that "the document is outdated after a code change."
 
 In short: **first the format and structure, then a minimal prototype**.
@@ -61,9 +61,9 @@ Extensibility: code and doc parsers are per-language plugins; the graph and repo
 ## MVP (First Iteration)
 
 - **Features**:
-  - Parse modules (functions, methods, signatures) for Python and TypeScript/JavaScript
-  - Documentation page with anchors linking to code entities
-  - Check: when a signature changes in code, the related doc paragraph is marked as outdated
+  - Parse modules (functions, methods, signatures, and language-specific constructs) for **Python**, **TypeScript/JavaScript**, and **Go**
+  - Documentation (e.g. Markdown) with `livedoc` anchors linking to code entities
+  - Detect outdated doc sections when linked code signatures change; **anchor validation** (each `code_id` must exist in parsed code); **code locations** in reports (`path:line` to the definition)
 - **Extensibility**: abstractions for the code parser and anchor format to support more languages and IDE integration later.
 
 ## Repository Structure
@@ -177,6 +177,18 @@ python -m twine upload dist/*
 ```
 
 Requires a PyPI account and token. Use `__token__` as username and your API token as password.
+
+## GitHub About (repository homepage)
+
+On [github.com/baksvell/Livedoc](https://github.com/baksvell/Livedoc), click **⚙️** next to **About** and set:
+
+| Field | Suggested value |
+|--------|------------------|
+| **Description** | Link docs to code; flag outdated Markdown when signatures change. |
+| **Website** | https://pypi.org/project/living-doc/ |
+| **Topics** | `documentation`, `living-docs`, `python`, `typescript`, `go`, `golang`, `code-docs`, `markdown`, `developer-tools` |
+
+*(Topics are added one by one in the About editor.)*
 
 ## Next Steps
 

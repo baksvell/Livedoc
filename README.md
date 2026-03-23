@@ -149,6 +149,7 @@ python -m livedoc examples
 # Options (CLI overrides .livedoc.json):
 #   --ignore PATTERN   Exclude paths (can be repeated)
 #   --format json      Machine-readable output for CI/scripts
+#   --quiet            Reduce non-essential output (good for CI logs)
 #   .livedoc.json      Config: docs, ignore, format
 #   .livedocignore     File with ignore patterns (one per line)
 ```
@@ -244,3 +245,7 @@ On [github.com/baksvell/Livedoc](https://github.com/baksvell/Livedoc), click **â
 - Add parsers for other languages in `parsers/`
 - IDE integration: LSP or extension (show docs on hover)
 - Generate and serve a documentation site with "outdated" highlights
+
+## Contributing
+
+See [`CONTRIBUTING.md`](CONTRIBUTING.md) for development setup, tests, and PR checklist.

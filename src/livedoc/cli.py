@@ -43,6 +43,7 @@ def run_check(
     update_signatures: bool,
     ignore_patterns: tuple[str, ...] = (),
     output_format: str = "text",
+    quiet: bool = False,
 ) -> int:
     """
     Build code↔doc graph, compare signatures, output outdated fragments.
@@ -87,7 +88,8 @@ def run_check(
         # First run: save current state
         cs = CodeSignatures(current_sigs, readable=current_readable)
         cs.save(sig_path, readable=current_readable)
-        print("First run: code signatures saved. Future code changes will mark linked docs as outdated.")
+        if not quiet:
+            print("First run: code signatures saved. Future code changes will mark linked docs as outdated.")
         if unknown_refs:
             report = report_outdated(
                 [],
@@ -117,7 +119,8 @@ def run_check(
     if update_signatures:
         cs = CodeSignatures(current_sigs, readable=current_readable)
         cs.save(sig_path, readable=current_readable)
-        print("Code signatures updated.")
+        if not quiet:
+            print("Code signatures updated.")
 
     report = report_outdated(
         outdated,
@@ -127,7 +130,9 @@ def run_check(
         project_root=root,
         output_format=output_format,
     )
-    print(report)
+    should_print_report = output_format == "json" or bool(outdated or unknown_refs) or not quiet
+    if should_print_report:
+        print(report)
 
     if outdated or unknown_refs:
         return 1
@@ -166,6 +171,11 @@ def main() -> int:
         default=argparse.SUPPRESS,
         help="Output format: text or json (default: from config or text)",
     )
+    parser.add_argument(
+        "--quiet",
+        action="store_true",
+        help="Reduce non-essential output (still shows errors and failures).",
+    )
     args = parser.parse_args()
     root = Path(args.path).resolve()
     config = load_config(root)
@@ -174,7 +184,7 @@ def main() -> int:
     ignore_cli = tuple(args.ignore) if args.ignore else ()
     ignore_config = tuple(config.get("ignore", []))
     ignore = ignore_config + ignore_cli
-    return run_check(args.path, docs, args.update, ignore, output_format)
+    return run_check(args.path, docs, args.update, ignore, output_format, args.quiet)
 
 
 if __name__ == "__main__":

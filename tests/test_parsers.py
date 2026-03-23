@@ -113,6 +113,60 @@ def test_load_livedocignore() -> None:
         assert "#" not in "".join(patterns)
 
 
+def test_run_check_quiet_no_output(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    from livedoc.cli import run_check
+
+    (tmp_path / "mod.py").write_text(
+        "def add(a: int, b: int) -> int:\n    return a + b\n",
+        encoding="utf-8",
+    )
+    docs_dir = tmp_path / "docs"
+    docs_dir.mkdir()
+    (docs_dir / "api.md").write_text(
+        '<!-- livedoc: code_id = "mod:add" -->\n## add\nAdd docs.\n',
+        encoding="utf-8",
+    )
+
+    rc_first = run_check(tmp_path, "docs", update_signatures=False, quiet=True)
+    out_first = capsys.readouterr()
+    assert rc_first == 0
+    assert out_first.out == ""
+
+    rc_second = run_check(tmp_path, "docs", update_signatures=False, quiet=True)
+    out_second = capsys.readouterr()
+    assert rc_second == 0
+    assert out_second.out == ""
+
+
+def test_run_check_quiet_still_prints_failures(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    from livedoc.cli import run_check
+
+    mod_file = tmp_path / "mod.py"
+    mod_file.write_text(
+        "def add(a: int, b: int) -> int:\n    return a + b\n",
+        encoding="utf-8",
+    )
+    docs_dir = tmp_path / "docs"
+    docs_dir.mkdir()
+    (docs_dir / "api.md").write_text(
+        '<!-- livedoc: code_id = "mod:add" -->\n## add\nAdd docs.\n',
+        encoding="utf-8",
+    )
+
+    assert run_check(tmp_path, "docs", update_signatures=False, quiet=True) == 0
+    _ = capsys.readouterr()
+
+    mod_file.write_text(
+        "def add(a: int, b: int, c: int) -> int:\n    return a + b + c\n",
+        encoding="utf-8",
+    )
+    rc = run_check(tmp_path, "docs", update_signatures=False, quiet=True)
+    out = capsys.readouterr()
+    assert rc == 1
+    assert "Possibly outdated documentation" in out.out
+    assert "mod:add" in out.out
+
+
 def test_report_outdated_with_changes() -> None:
     import tempfile
     from livedoc.core.graph import DocFragment

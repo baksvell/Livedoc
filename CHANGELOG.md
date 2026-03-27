@@ -2,6 +2,18 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.1.6] - 2026-04-01
+
+### Added
+
+- End-to-end CLI tests built on a small multi-language fixture project
+- Reusable test fixtures for Python, TypeScript, Go, and linked Markdown docs
+
+### Changed
+
+- JSON output is now machine-readable on the first run and is no longer mixed with informational text
+- CLI reliability improved through full scan-to-report regression coverage
+
 ## [0.1.5] - 2026-03-27
 
 ### Added

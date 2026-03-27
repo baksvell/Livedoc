@@ -88,9 +88,7 @@ def run_check(
         # First run: save current state
         cs = CodeSignatures(current_sigs, readable=current_readable)
         cs.save(sig_path, readable=current_readable)
-        if not quiet:
-            print("First run: code signatures saved. Future code changes will mark linked docs as outdated.")
-        if unknown_refs:
+        if output_format == "json" or unknown_refs:
             report = report_outdated(
                 [],
                 changes={},
@@ -100,7 +98,9 @@ def run_check(
                 output_format=output_format,
             )
             print(report)
-            return 1
+            return 1 if unknown_refs else 0
+        if not quiet:
+            print("First run: code signatures saved. Future code changes will mark linked docs as outdated.")
         return 0
 
     changed = stored.changed_code_ids(current_sigs)

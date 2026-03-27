@@ -39,6 +39,136 @@ def _normalize_param(param: str) -> str:
     return param.split(":")[0].strip().split("=")[0].strip()
 
 
+def _split_top_level_commas(text: str) -> list[str]:
+    """Split by commas, ignoring commas inside (), {}, [], <> and strings."""
+    parts: list[str] = []
+    current: list[str] = []
+    paren = brace = bracket = angle = 0
+    in_single = False
+    in_double = False
+    in_backtick = False
+    escaped = False
+
+    for ch in text:
+        if escaped:
+            current.append(ch)
+            escaped = False
+            continue
+        if ch == "\\":
+            current.append(ch)
+            escaped = True
+            continue
+        if in_single:
+            current.append(ch)
+            if ch == "'":
+                in_single = False
+            continue
+        if in_double:
+            current.append(ch)
+            if ch == '"':
+                in_double = False
+            continue
+        if in_backtick:
+            current.append(ch)
+            if ch == "`":
+                in_backtick = False
+            continue
+        if ch == "'":
+            current.append(ch)
+            in_single = True
+            continue
+        if ch == '"':
+            current.append(ch)
+            in_double = True
+            continue
+        if ch == "`":
+            current.append(ch)
+            in_backtick = True
+            continue
+        if ch == "(":
+            paren += 1
+        elif ch == ")":
+            paren = max(0, paren - 1)
+        elif ch == "{":
+            brace += 1
+        elif ch == "}":
+            brace = max(0, brace - 1)
+        elif ch == "[":
+            bracket += 1
+        elif ch == "]":
+            bracket = max(0, bracket - 1)
+        elif ch == "<":
+            angle += 1
+        elif ch == ">":
+            angle = max(0, angle - 1)
+        elif ch == "," and paren == 0 and brace == 0 and bracket == 0 and angle == 0:
+            part = "".join(current).strip()
+            if part:
+                parts.append(part)
+            current = []
+            continue
+        current.append(ch)
+
+    tail = "".join(current).strip()
+    if tail:
+        parts.append(tail)
+    return parts
+
+
+def _find_matching_paren(source: str, open_idx: int) -> int:
+    """Return index of matching ')' for source[open_idx] == '('; -1 if not found."""
+    depth = 0
+    in_single = in_double = in_backtick = False
+    escaped = False
+    for i in range(open_idx, len(source)):
+        ch = source[i]
+        if escaped:
+            escaped = False
+            continue
+        if ch == "\\":
+            escaped = True
+            continue
+        if in_single:
+            if ch == "'":
+                in_single = False
+            continue
+        if in_double:
+            if ch == '"':
+                in_double = False
+            continue
+        if in_backtick:
+            if ch == "`":
+                in_backtick = False
+            continue
+        if ch == "'":
+            in_single = True
+            continue
+        if ch == '"':
+            in_double = True
+            continue
+        if ch == "`":
+            in_backtick = True
+            continue
+        if ch == "(":
+            depth += 1
+        elif ch == ")":
+            depth -= 1
+            if depth == 0:
+                return i
+    return -1
+
+
+def _return_before(source: str, start: int, stop_char: str) -> str:
+    """Extract ': Type' between start and next stop_char, if present."""
+    end = source.find(stop_char, start)
+    if end == -1:
+        return ""
+    between = source[start:end].strip()
+    if between.startswith(":"):
+        return between[1:].strip()
+    return ""
+
+
 def _extract_args_from_parens(s: str) -> list[str]:
     """Extract param names from function(params) string, handling nested parens."""
     args: list[str] = []
@@ -68,13 +198,17 @@ def _extract_args_from_parens(s: str) -> list[str]:
 def _find_functions(source: str, module_path: str, file_path: Path) -> list[CodeEntity]:
     """Find function declarations: function name(...) and const name = (...) =>."""
     entities: list[CodeEntity] = []
-    # function name(...) or export function name(...) or export default function name(...)
-    pattern = r"(?:export\s+(?:default\s+)?)?(?:async\s+)?function\s+(\w+)\s*\(([^)]*)\)(?:\s*:\s*([^{]+))?"
+    # function name(...) or export/default/async variants
+    pattern = r"(?:export\s+(?:default\s+)?)?(?:async\s+)?function\s+(\w+)(?:\s*<[^>]*>)?\s*\("
     for m in re.finditer(pattern, source):
         name = m.group(1)
-        args_str = m.group(2) or ""
-        ret = (m.group(3) or "").strip() if m.group(3) else ""
-        args = [_normalize_param(p) for p in re.split(r"\s*,\s*", args_str) if p.strip()]
+        open_idx = m.end() - 1
+        close_idx = _find_matching_paren(source, open_idx)
+        if close_idx == -1:
+            continue
+        args_str = source[open_idx + 1 : close_idx]
+        ret = _return_before(source, close_idx + 1, "{")
+        args = [_normalize_param(p) for p in _split_top_level_commas(args_str) if p.strip()]
         line = source[: m.start()].count("\n") + 1
         entities.append(
             CodeEntity(
@@ -86,19 +220,30 @@ def _find_functions(source: str, module_path: str, file_path: Path) -> list[Code
                 line=line,
             )
         )
-    # const name = (params) => or const name = (params): Type =>
-    pattern2 = r"(?:export\s+)?(?:const|let)\s+(\w+)\s*=\s*(?:async\s+)?\(([^)]*)\)(?:\s*:\s*[^=>]+)?\s*=>"
+    # const/let name = (params) => or const/let name = (params): Type =>
+    pattern2 = r"(?:export\s+)?(?:const|let)\s+(\w+)\s*=\s*(?:async\s+)?\("
     for m in re.finditer(pattern2, source):
         name = m.group(1)
-        args_str = m.group(2) or ""
-        args = [_normalize_param(p) for p in re.split(r"\s*,\s*", args_str) if p.strip()]
+        open_idx = m.end() - 1
+        close_idx = _find_matching_paren(source, open_idx)
+        if close_idx == -1:
+            continue
+        args_str = source[open_idx + 1 : close_idx]
+        after = source[close_idx + 1 :]
+        arrow_pos = after.find("=>")
+        ret = ""
+        if arrow_pos != -1:
+            between = after[:arrow_pos].strip()
+            if between.startswith(":"):
+                ret = between[1:].strip()
+        args = [_normalize_param(p) for p in _split_top_level_commas(args_str) if p.strip()]
         line = source[: m.start()].count("\n") + 1
         entities.append(
             CodeEntity(
                 code_id=f"{module_path}:{name}",
                 name=name,
                 args=args,
-                return_annotation="",
+                return_annotation=ret,
                 file_path=file_path,
                 line=line,
             )
@@ -123,19 +268,22 @@ def _find_classes_and_methods(source: str, module_path: str, file_path: Path) ->
                 brace_depth -= 1
             i += 1
         class_body = source[start:i]
-        # Find methods: name(...) { or async name(...) { or get name() {
-        method_pattern = r"(?:async\s+)?(\w+)\s*\(([^)]*)\)(?:\s*:\s*([^{]+))?\s*\{"
+        # Find methods: name(...) { or async name(...) { (inside class body)
+        method_pattern = r"(?:async\s+)?(\w+)\s*\("
         for m in re.finditer(method_pattern, class_body):
             name = m.group(1)
-            if name in ("constructor", "get", "set"):
+            if name == "constructor":
                 continue
-            args_str = m.group(2) or ""
-            ret = (m.group(3) or "").strip() if m.group(3) else ""
-            args = [_normalize_param(p) for p in re.split(r"\s*,\s*", args_str) if p.strip()]
+            open_idx = class_match.end() + m.end() - 1
+            close_idx = _find_matching_paren(source, open_idx)
+            if close_idx == -1:
+                continue
+            args_str = source[open_idx + 1 : close_idx]
+            ret = _return_before(source, close_idx + 1, "{")
+            args = [_normalize_param(p) for p in _split_top_level_commas(args_str) if p.strip()]
             if "this" in args:
                 args = [a for a in args if a != "this"]
-            body_start = class_match.start() + len(class_match.group(0)) + m.start()
-            line = source[:body_start].count("\n") + 1
+            line = source[: m.start() + class_match.end()].count("\n") + 1
             entities.append(
                 CodeEntity(
                     code_id=f"{module_path}:{class_name}.{name}",

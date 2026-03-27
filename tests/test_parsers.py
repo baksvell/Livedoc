@@ -406,6 +406,111 @@ def test_parse_go_ignores_test_files() -> None:
         assert "calc:TestAdd" not in code_ids
 
 
+def test_parse_go_edge_no_return_and_variadic() -> None:
+    import tempfile
+
+    with tempfile.TemporaryDirectory() as d:
+        root = Path(d)
+        src = root / "edge.go"
+        src.write_text(
+            (
+                "package edge\n\n"
+                "func Log(msg string, tags ...string) {\n"
+                "}\n\n"
+                "type Logger struct{}\n\n"
+                "func (l *Logger) Close() {\n"
+                "}\n"
+            ),
+            encoding="utf-8",
+        )
+        entities = parse_go_module(root, root, ignore_patterns=())
+        by_id = {e.code_id: e for e in entities}
+        assert "edge:Log" in by_id
+        assert by_id["edge:Log"].args == ["msg", "tags"]
+        assert by_id["edge:Log"].return_annotation == ""
+        assert "edge:(*Logger).Close" in by_id
+        assert by_id["edge:(*Logger).Close"].return_annotation == ""
+
+
+def test_parse_go_edge_callback_and_multireturn() -> None:
+    import tempfile
+
+    with tempfile.TemporaryDirectory() as d:
+        root = Path(d)
+        src = root / "advanced.go"
+        src.write_text(
+            (
+                "package advanced\n\n"
+                "func Transform(items []int, mapper func(a int, b int) int) ([]int, error) {\n"
+                "    return nil, nil\n"
+                "}\n\n"
+                "type Service struct{}\n\n"
+                "func (s Service) Merge(in map[string][]int) (map[string]int, error) {\n"
+                "    return nil, nil\n"
+                "}\n"
+            ),
+            encoding="utf-8",
+        )
+        entities = parse_go_module(root, root, ignore_patterns=())
+        by_id = {e.code_id: e for e in entities}
+        assert "advanced:Transform" in by_id
+        assert by_id["advanced:Transform"].args == ["items", "mapper"]
+        assert by_id["advanced:Transform"].return_annotation == "([]int, error)"
+        assert "advanced:Service.Merge" in by_id
+        assert by_id["advanced:Service.Merge"].args == ["in"]
+        assert by_id["advanced:Service.Merge"].return_annotation == "(map[string]int, error)"
+
+
+def test_parse_go_edge_grouped_names_channels_and_unnamed_types() -> None:
+    import tempfile
+
+    with tempfile.TemporaryDirectory() as d:
+        root = Path(d)
+        src = root / "channels.go"
+        src.write_text(
+            (
+                "package channels\n\n"
+                "func Sum(a, b, c int) int { return a + b + c }\n\n"
+                "func Pipe(in <-chan int, out chan<- int, mapper func(a int, b int) int) {\n"
+                "}\n\n"
+                "func Consume(int, string) {\n"
+                "}\n"
+            ),
+            encoding="utf-8",
+        )
+        entities = parse_go_module(root, root, ignore_patterns=())
+        by_id = {e.code_id: e for e in entities}
+        assert "channels:Sum" in by_id
+        assert by_id["channels:Sum"].args == ["a", "b", "c"]
+        assert "channels:Pipe" in by_id
+        assert by_id["channels:Pipe"].args == ["in", "out", "mapper"]
+        assert "channels:Consume" in by_id
+        assert by_id["channels:Consume"].args == []
+
+
+def test_parse_go_edge_blank_identifier_and_context_arg() -> None:
+    import tempfile
+
+    with tempfile.TemporaryDirectory() as d:
+        root = Path(d)
+        src = root / "ctx.go"
+        src.write_text(
+            (
+                "package ctxpkg\n\n"
+                "import \"context\"\n\n"
+                "func Handle(ctx context.Context, _ string, value int) error {\n"
+                "    return nil\n"
+                "}\n"
+            ),
+            encoding="utf-8",
+        )
+        entities = parse_go_module(root, root, ignore_patterns=())
+        by_id = {e.code_id: e for e in entities}
+        assert "ctxpkg:Handle" in by_id
+        assert by_id["ctxpkg:Handle"].args == ["ctx", "value"]
+        assert by_id["ctxpkg:Handle"].return_annotation == "error"
+
+
 def test_parse_typescript_ignores_d_ts() -> None:
     """*.d.ts files should be ignored."""
     import tempfile
@@ -431,6 +536,117 @@ def test_parse_typescript_module() -> None:
     code_ids = {e.code_id for e in entities}
     assert "ts_sample.utils:add" in code_ids
     assert "ts_sample.utils:Calculator.divide" in code_ids
+
+
+def test_parse_typescript_edge_params() -> None:
+    import tempfile
+
+    with tempfile.TemporaryDirectory() as d:
+        root = Path(d)
+        src = root / "edge.ts"
+        src.write_text(
+            (
+                "export function withDefaults(a: number = 1, opts = { x: 1, y: 2 }): void {}\n"
+                "export const withArrow = ({ name, age }: { name: string; age: number }, tags: string[] = [\"a\", \"b\"]) => tags.length\n"
+            ),
+            encoding="utf-8",
+        )
+        entities = parse_typescript_module(root, root, ignore_patterns=())
+        by_id = {e.code_id: e for e in entities}
+        assert "edge:withDefaults" in by_id
+        assert "edge:withArrow" in by_id
+        assert by_id["edge:withDefaults"].args == ["a", "opts"]
+        assert by_id["edge:withArrow"].args == ["name", "tags"]
+
+
+def test_parse_typescript_edge_generics_and_callback_types() -> None:
+    import tempfile
+
+    with tempfile.TemporaryDirectory() as d:
+        root = Path(d)
+        src = root / "generic.ts"
+        src.write_text(
+            (
+                "export function identity<T>(value: T): T { return value; }\n"
+                "export function withCallback(cb: (x: number, y: number) => void): void { cb(1, 2); }\n"
+                "export const reduceValues = (mapper: (x: number, y: number) => number, initial = 0): number => initial\n"
+            ),
+            encoding="utf-8",
+        )
+        entities = parse_typescript_module(root, root, ignore_patterns=())
+        by_id = {e.code_id: e for e in entities}
+        assert "generic:identity" in by_id
+        assert "generic:withCallback" in by_id
+        assert "generic:reduceValues" in by_id
+        assert by_id["generic:identity"].args == ["value"]
+        assert by_id["generic:withCallback"].args == ["cb"]
+        assert by_id["generic:reduceValues"].args == ["mapper", "initial"]
+        assert by_id["generic:reduceValues"].return_annotation == "number"
+
+
+def test_parse_typescript_edge_multiline_and_class_callback_method() -> None:
+    import tempfile
+
+    with tempfile.TemporaryDirectory() as d:
+        root = Path(d)
+        src = root / "multi.ts"
+        src.write_text(
+            (
+                "export default async function fetchMapped<T>(\n"
+                "  opts: { url: string; headers?: Record<string, string> } = { url: \"/\" },\n"
+                "  mapper: (x: T, y: number) => Promise<T>,\n"
+                "): Promise<T> {\n"
+                "  return mapper({} as T, 1)\n"
+                "}\n\n"
+                "export class Service {\n"
+                "  run(\n"
+                "    handler: (a: number, b: number) => number,\n"
+                "    values: Array<number>,\n"
+                "  ): number {\n"
+                "    return handler(values[0], values[1])\n"
+                "  }\n"
+                "}\n"
+            ),
+            encoding="utf-8",
+        )
+        entities = parse_typescript_module(root, root, ignore_patterns=())
+        by_id = {e.code_id: e for e in entities}
+        assert "multi:fetchMapped" in by_id
+        assert by_id["multi:fetchMapped"].args == ["opts", "mapper"]
+        assert "Promise<T>" in by_id["multi:fetchMapped"].return_annotation
+        assert "multi:Service.run" in by_id
+        assert by_id["multi:Service.run"].args == ["handler", "values"]
+
+
+def test_parse_typescript_edge_interface_extends_and_overload_impl() -> None:
+    import tempfile
+
+    with tempfile.TemporaryDirectory() as d:
+        root = Path(d)
+        src = root / "contracts.ts"
+        src.write_text(
+            (
+                "interface A { a: string }\n"
+                "interface B { b: number }\n"
+                "export interface Combined extends A, B {\n"
+                "  id: string\n"
+                "}\n\n"
+                "export class Formatter {\n"
+                "  format(x: string): string;\n"
+                "  format(x: number): string;\n"
+                "  format(x: string | number): string {\n"
+                "    return String(x)\n"
+                "  }\n"
+                "}\n"
+            ),
+            encoding="utf-8",
+        )
+        entities = parse_typescript_module(root, root, ignore_patterns=())
+        by_id = {e.code_id: e for e in entities}
+        assert "contracts:Combined" in by_id
+        assert "id" in by_id["contracts:Combined"].args
+        assert "contracts:Formatter.format" in by_id
+        assert by_id["contracts:Formatter.format"].args == ["x"]
 
 
 def test_parse_doc_file_malformed_anchor() -> None:

@@ -18,24 +18,88 @@ def _extract_package(source: str) -> str:
     return m.group(1) if m else "main"
 
 
+def _split_go_top_level_commas(text: str) -> list[str]:
+    """Split Go params by top-level commas (ignore commas in (), [], {})."""
+    parts: list[str] = []
+    current: list[str] = []
+    paren = brace = bracket = 0
+    for ch in text:
+        if ch == "(":
+            paren += 1
+        elif ch == ")":
+            paren = max(0, paren - 1)
+        elif ch == "{":
+            brace += 1
+        elif ch == "}":
+            brace = max(0, brace - 1)
+        elif ch == "[":
+            bracket += 1
+        elif ch == "]":
+            bracket = max(0, bracket - 1)
+        elif ch == "," and paren == 0 and brace == 0 and bracket == 0:
+            part = "".join(current).strip()
+            if part:
+                parts.append(part)
+            current = []
+            continue
+        current.append(ch)
+    tail = "".join(current).strip()
+    if tail:
+        parts.append(tail)
+    return parts
+
+
+def _find_matching_paren(source: str, open_idx: int) -> int:
+    """Return index of matching ')' for source[open_idx] == '('; -1 if not found."""
+    depth = 0
+    for i in range(open_idx, len(source)):
+        ch = source[i]
+        if ch == "(":
+            depth += 1
+        elif ch == ")":
+            depth -= 1
+            if depth == 0:
+                return i
+    return -1
+
+
+def _return_before(source: str, start: int, stop_char: str) -> str:
+    end = source.find(stop_char, start)
+    if end == -1:
+        return ""
+    return source[start:end].strip()
+
+
 def _extract_go_params(params_str: str) -> list[str]:
     """Extract param names from Go params: 'a, b int' or 'ctx context.Context'."""
     args: list[str] = []
     # Split by comma at top level (Go allows "a, b int" - names share type)
-    parts = re.split(r"\s*,\s*", params_str.strip())
+    parts = _split_go_top_level_commas(params_str.strip())
+    pending_names: list[str] = []
     for part in parts:
         part = part.strip()
         if not part:
             continue
-        # "a int" or "a, b int" - last token is type, rest are names
+        if part.startswith("..."):
+            # Unnamed variadic parameter: type-only, skip.
+            continue
         tokens = part.split()
         if len(tokens) >= 2:
-            # Last is type, rest are param names
-            for t in tokens[:-1]:
-                if t and not t.startswith("..."):
-                    args.append(t)
-        elif len(tokens) == 1 and not tokens[0].startswith("..."):
-            args.append(tokens[0])
+            name = tokens[0]
+            if re.fullmatch(r"[A-Za-z_]\w*", name) and name != "_":
+                args.extend(pending_names)
+                pending_names = []
+                args.append(name)
+            else:
+                pending_names = []
+            continue
+        token = tokens[0]
+        if re.fullmatch(r"[A-Za-z_]\w*", token) and token != "_":
+            # Could be "a" from "a, b int" or unnamed basic type.
+            # Keep temporarily; flush only when a typed segment appears.
+            pending_names.append(token)
+        else:
+            pending_names = []
     return args
 
 
@@ -44,11 +108,15 @@ def parse_go_file(file_path: Path, pkg: str) -> list[CodeEntity]:
     source = file_path.read_text(encoding="utf-8")
     entities: list[CodeEntity] = []
     # Methods first (they match func (r) Name pattern)
-    for m in re.finditer(r"\bfunc\s+\(([^)]+)\)\s+(\w+)\s*\(([^)]*)\)\s*([^{]+)", source):
+    for m in re.finditer(r"\bfunc\s+\(([^)]+)\)\s+(\w+)\s*\(", source):
         recv = m.group(1).strip().split()
         method_name = m.group(2)
-        params_str = m.group(3).strip()
-        ret = m.group(4).strip()
+        open_idx = m.end() - 1
+        close_idx = _find_matching_paren(source, open_idx)
+        if close_idx == -1:
+            continue
+        params_str = source[open_idx + 1 : close_idx].strip()
+        ret = _return_before(source, close_idx + 1, "{")
         if not recv:
             continue
         type_name = recv[-1]
@@ -65,14 +133,16 @@ def parse_go_file(file_path: Path, pkg: str) -> list[CodeEntity]:
                 line=line,
             )
         )
-    # Functions (exclude those that are methods - already have "func (" before)
-    func_pattern = r"(?<!\)\s)\bfunc\s+(\w+)\s*\(([^)]*)\)\s*([^{]+)"
+    # Functions (methods are excluded by requiring "func Name(" pattern)
+    func_pattern = r"\bfunc\s+(\w+)\s*\("
     for m in re.finditer(func_pattern, source):
-        if re.search(r"func\s+\([^)]+\)\s+\w+\s*\(", source[max(0, m.start() - 50) : m.start() + 10]):
-            continue
         name = m.group(1)
-        params_str = m.group(2).strip()
-        ret = m.group(3).strip()
+        open_idx = m.end() - 1
+        close_idx = _find_matching_paren(source, open_idx)
+        if close_idx == -1:
+            continue
+        params_str = source[open_idx + 1 : close_idx].strip()
+        ret = _return_before(source, close_idx + 1, "{")
         args = _extract_go_params(params_str)
         line = source[: m.start()].count("\n") + 1
         entities.append(

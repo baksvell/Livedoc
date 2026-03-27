@@ -2,6 +2,17 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.1.5] - 2026-03-27
+
+### Added
+
+- Regression tests for additional TypeScript and Go parser edge cases
+
+### Changed
+
+- Improved parser reliability for complex TypeScript signatures
+- Improved Go parameter extraction so blank identifier `_` is not treated as a tracked argument
+
 ## [0.1.4] - 2026-03-20
 
 ### Added

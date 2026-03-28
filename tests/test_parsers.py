@@ -195,6 +195,7 @@ def test_report_outdated_with_changes() -> None:
     assert "m:add" in report
     assert "calc.py:12" in report
     assert "Code:" in report
+    assert "Reason: args changed" in report
 
 
 def test_report_outdated_json_format() -> None:
@@ -229,6 +230,7 @@ def test_report_outdated_json_format() -> None:
     assert '"ok": false' in report
     assert "api.md#add" in report
     assert "m:add" in report
+    assert '"reason": "args changed"' in report
     assert '"code_file": "m.py"' in report
     assert '"code_line": 7' in report
 
@@ -271,6 +273,39 @@ def test_report_outdated_removed_symbol_shows_hint() -> None:
     changes = {"m:gone": ("gone() -> void", None)}
     report = report_outdated([f], changes=changes, entities_by_id={})
     assert "removed from codebase" in report
+    assert "Reason: symbol removed" in report
+
+
+def test_report_outdated_return_type_reason_in_json() -> None:
+    import tempfile
+    from livedoc.core.graph import DocFragment
+    from livedoc.core.signatures import CodeEntity
+    from livedoc.report.reporter import report_outdated
+
+    with tempfile.TemporaryDirectory() as d:
+        root = Path(d)
+        cf = root / "m.py"
+        cf.write_text("x", encoding="utf-8")
+        f = DocFragment("api.md#compute", Path("api.md"), 5, ["m:compute"], "compute")
+        changes = {"m:compute": ("compute(a) -> int", "compute(a) -> str")}
+        entities = {
+            "m:compute": CodeEntity(
+                code_id="m:compute",
+                name="compute",
+                args=["a"],
+                return_annotation="str",
+                file_path=cf,
+                line=7,
+            )
+        }
+        report = report_outdated(
+            [f],
+            changes=changes,
+            entities_by_id=entities,
+            project_root=root,
+            output_format="json",
+        )
+    assert '"reason": "return type changed"' in report
 
 
 def test_report_unknown_anchors_json() -> None:
@@ -292,12 +327,16 @@ def test_config_load() -> None:
         root = Path(d)
         config_path = root / ".livedoc.json"
         config_path.write_text(
-            '{"docs": "mydocs", "ignore": ["build"], "format": "json"}',
+            (
+                '{"docs": "mydocs", "ignore": ["build"], '
+                '"ignore_code_ids": ["pkg:GeneratedClient"], "format": "json"}'
+            ),
             encoding="utf-8",
         )
         config = load_config(root)
         assert config["docs"] == "mydocs"
         assert config["ignore"] == ["build"]
+        assert config["ignore_code_ids"] == ["pkg:GeneratedClient"]
         assert config["format"] == "json"
 
 

@@ -3,11 +3,13 @@
 from __future__ import annotations
 
 import argparse
+import fnmatch
 import sys
 from pathlib import Path
 
 from livedoc.config import load_config
 from livedoc.core.graph import DocGraph, find_unknown_anchor_refs
+from livedoc.core.graph import DocFragment
 from livedoc.core.signatures import CodeSignatures
 from livedoc.parsers.doc_parser import parse_doc_anchors
 from livedoc.parsers.python_parser import (
@@ -37,11 +39,65 @@ def _load_livedocignore(root: Path) -> tuple[str, ...]:
     return tuple(patterns)
 
 
+def _is_ignored_code_id(code_id: str, ignore_code_ids: tuple[str, ...]) -> bool:
+    """Return True if code_id matches any configured ignore pattern."""
+    return any(fnmatch.fnmatch(code_id, pattern) for pattern in ignore_code_ids)
+
+
+def _filter_doc_fragments(
+    fragments: list[DocFragment],
+    ignore_code_ids: tuple[str, ...],
+) -> list[DocFragment]:
+    """Remove ignored code_ids from fragments and drop empty fragments."""
+    if not ignore_code_ids:
+        return fragments
+    filtered: list[DocFragment] = []
+    for fragment in fragments:
+        code_ids = [
+            code_id
+            for code_id in fragment.code_ids
+            if not _is_ignored_code_id(code_id, ignore_code_ids)
+        ]
+        if code_ids:
+            filtered.append(
+                DocFragment(
+                    doc_fragment_id=fragment.doc_fragment_id,
+                    file_path=fragment.file_path,
+                    line_start=fragment.line_start,
+                    code_ids=code_ids,
+                    heading=fragment.heading,
+                )
+            )
+    return filtered
+
+
+def _filter_stored_signatures(
+    stored: CodeSignatures | None,
+    ignore_code_ids: tuple[str, ...],
+) -> CodeSignatures | None:
+    """Drop ignored code_ids from stored baseline before comparing changes."""
+    if stored is None or not ignore_code_ids:
+        return stored
+    return CodeSignatures(
+        signatures={
+            code_id: sig
+            for code_id, sig in stored.signatures.items()
+            if not _is_ignored_code_id(code_id, ignore_code_ids)
+        },
+        readable={
+            code_id: sig
+            for code_id, sig in stored.readable.items()
+            if not _is_ignored_code_id(code_id, ignore_code_ids)
+        },
+    )
+
+
 def run_check(
     project_root: Path,
     docs_dir: str,
     update_signatures: bool,
     ignore_patterns: tuple[str, ...] = (),
+    ignore_code_ids: tuple[str, ...] = (),
     output_format: str = "text",
     quiet: bool = False,
 ) -> int:
@@ -67,12 +123,18 @@ def run_check(
     entities = parse_python_module(root, code_path, ignore_patterns=ignore_tuple)
     entities.extend(parse_typescript_module(root, code_path, ignore_tuple))
     entities.extend(parse_go_module(root, code_path, ignore_tuple))
+    if ignore_code_ids:
+        entities = [
+            entity
+            for entity in entities
+            if not _is_ignored_code_id(entity.code_id, ignore_code_ids)
+        ]
     current_sigs = build_current_signatures(entities)
     entities_by_id = {e.code_id: e for e in entities}
     current_readable = {e.code_id: e.format_signature() for e in entities}
 
     # Parse docs
-    fragments = parse_doc_anchors(docs_path)
+    fragments = _filter_doc_fragments(parse_doc_anchors(docs_path), ignore_code_ids)
     graph = DocGraph()
     for f in fragments:
         for code_id in f.code_ids:
@@ -82,7 +144,7 @@ def run_check(
 
     # Load stored signatures
     sig_path = root / SIGNATURES_FILE
-    stored = CodeSignatures.load(sig_path)
+    stored = _filter_stored_signatures(CodeSignatures.load(sig_path), ignore_code_ids)
 
     if stored is None:
         # First run: save current state
@@ -184,7 +246,8 @@ def main() -> int:
     ignore_cli = tuple(args.ignore) if args.ignore else ()
     ignore_config = tuple(config.get("ignore", []))
     ignore = ignore_config + ignore_cli
-    return run_check(args.path, docs, args.update, ignore, output_format, args.quiet)
+    ignore_code_ids = tuple(config.get("ignore_code_ids", []))
+    return run_check(args.path, docs, args.update, ignore, ignore_code_ids, output_format, args.quiet)
 
 
 if __name__ == "__main__":

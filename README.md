@@ -109,8 +109,15 @@ LiveDoc/
 
 5. **Optional**: Add `.livedoc.json` in project root for defaults:
    ```json
-   {"docs": "docs", "ignore": ["build"], "format": "text"}
+   {
+     "docs": "docs",
+     "ignore": ["build"],
+     "ignore_code_ids": ["generated.client:*"],
+     "format": "text"
+   }
    ```
+
+   Use `ignore_code_ids` to exclude specific symbols or glob patterns from checks.
 
 6. **Optional**: Add `.livedocignore` (one pattern per line) to exclude paths:
    ```
@@ -150,7 +157,7 @@ python -m livedoc examples
 #   --ignore PATTERN   Exclude paths (can be repeated)
 #   --format json      Machine-readable output for CI/scripts
 #   --quiet            Reduce non-essential output (good for CI logs)
-#   .livedoc.json      Config: docs, ignore, format
+#   .livedoc.json      Config: docs, ignore, ignore_code_ids, format
 #   .livedocignore     File with ignore patterns (one per line)
 ```
 
@@ -198,8 +205,9 @@ jobs:
 ```
 
 - Replace `docs` with your docs directory if needed, or rely on `.livedoc.json` (`"docs": "..."`) and use `python -m livedoc .`.
-- To **pin** the version: `pip install "living-doc==0.1.4"`.
+- To **pin** the version: `pip install "living-doc==0.1.6"`.
 - For **machine-readable** logs: add `--format json` or set `"format": "json"` in `.livedoc.json` (e.g. to parse in a follow-up step).
+- To exclude specific symbols from checks, set `"ignore_code_ids": ["pkg:GeneratedClient", "internal.*:*"]` in `.livedoc.json`.
 
 ### When CI fails
 
@@ -212,7 +220,21 @@ Every `code_id` in a livedoc anchor must match a symbol parsed from your project
 
 ## Code locations in reports
 
-When documentation is outdated because a linked symbol changed, the text report includes a **Code:** line with the file path (relative to the project root) and line number of the current definition, e.g. `sample_module/calc.py:6`. JSON entries under `code_changes` include `code_file` and `code_line`. If the symbol was removed from the codebase, the report says `(symbol removed from codebase)` instead.
+When documentation is outdated because a linked symbol changed, the text report includes a **Code:** line with the file path (relative to the project root) and line number of the current definition, e.g. `sample_module/calc.py:6`. JSON entries under `code_changes` include `code_file` and `code_line`. Each change also includes a `reason` such as `args changed`, `return type changed`, or `symbol removed`. If the symbol was removed from the codebase, the text report says `(symbol removed from codebase)` instead.
+
+Example JSON fragment:
+
+```json
+{
+  "code_id": "web.service:render",
+  "old_sig": "render(name) -> string",
+  "new_sig": "render(name, locale) -> string",
+  "reason": "args changed",
+  "diff": "render(name) -> string  ->  render(name, locale) -> string",
+  "code_file": "web/service.ts",
+  "code_line": 1
+}
+```
 
 ## CI in this repository
 

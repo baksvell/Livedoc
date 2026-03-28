@@ -12,7 +12,8 @@ CONFIG_FILE = ".livedoc.json"
 def load_config(root: Path) -> dict:
     """
     Load config from root/.livedoc.json.
-    Returns dict with keys: docs, ignore, format. Missing keys use defaults.
+    Returns dict with keys: docs, ignore, ignore_code_ids, format.
+    Missing keys use defaults.
     """
     path = root.resolve() / CONFIG_FILE
     if not path.exists():
@@ -26,6 +27,8 @@ def load_config(root: Path) -> dict:
             result["docs"] = data["docs"]
         if "ignore" in data and isinstance(data["ignore"], list):
             result["ignore"] = [str(x) for x in data["ignore"] if isinstance(x, str)]
+        if "ignore_code_ids" in data and isinstance(data["ignore_code_ids"], list):
+            result["ignore_code_ids"] = [str(x) for x in data["ignore_code_ids"] if isinstance(x, str)]
         if "format" in data and data["format"] in ("text", "json"):
             result["format"] = data["format"]
         return result

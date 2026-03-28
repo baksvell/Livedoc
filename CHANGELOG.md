@@ -2,6 +2,17 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.1.7] - 2026-04-03
+
+### Added
+
+- Config support for `ignore_code_ids` to exclude specific symbols or glob patterns from checks
+
+### Changed
+
+- Reports now include explicit change reasons such as `args changed`, `return type changed`, and `symbol removed`
+- README updated with `ignore_code_ids` examples and JSON report examples including `reason`
+
 ## [0.1.6] - 2026-04-01
 
 ### Added

@@ -30,8 +30,9 @@ On the first run, LiveDoc stores the current code signatures. On later runs, it 
 - Detects signature changes that may make documentation outdated
 - Validates that every documented `code_id` exists in the scanned project
 - Reports the source file and line of changed symbols
+- Initializes new projects with `livedoc init`
+- Discovers reusable `code_id` values with `livedoc symbols`
 - Detects duplicate `code_id` values
-- Lists reusable `code_id` values with `livedoc symbols`
 - Supports text and JSON output
 - Supports project configuration through `.livedoc.json`
 - Supports path exclusions through `.livedocignore` and `--ignore`
@@ -76,25 +77,47 @@ LiveDoc requires Python 3.10 or newer.
 
 ## Quick Start
 
-### 1. Discover available symbols
+### 1. Initialize LiveDoc
 
-From the project root, list the symbols LiveDoc can reference:
+From the project root:
+
+```bash
+livedoc init .
+```
+
+This creates:
+
+```text
+.livedoc.json
+docs/
+docs/README.md
+```
+
+Existing configuration and documentation files are preserved. Use `--force` only when you intentionally want to overwrite the generated `.livedoc.json` and starter `docs/README.md` files.
+
+To use a different documentation directory:
+
+```bash
+livedoc init . --docs documentation
+```
+
+### 2. Discover reusable `code_id` values
 
 ```bash
 livedoc symbols .
 ```
 
-The command prints each reusable `code_id`, its detailed signature, and its source location. Use JSON output for scripts and integrations:
+For machine-readable output:
 
 ```bash
 livedoc symbols . --format json
 ```
 
-The command respects `.livedocignore`, configured `ignore` paths, command-line `--ignore` values, and `ignore_code_ids`. It does not require a `docs/` directory or create a signature baseline.
+Copy the required `code_id` from the output.
 
-### 2. Add an anchor to Markdown
+### 3. Link a Markdown section to code
 
-Create a documentation file under `docs/` and place a LiveDoc anchor before the section it describes:
+Add a LiveDoc anchor before the section it describes:
 
 ```markdown
 <!-- livedoc: code_id = "mymodule.calc:add" -->
@@ -103,40 +126,31 @@ Create a documentation file under `docs/` and place a LiveDoc anchor before the 
 Adds two numbers and returns an integer.
 ```
 
-### 3. Run LiveDoc for the first time
-
-From the project root:
+### 4. Create the initial signature baseline
 
 ```bash
 livedoc . --docs docs
 ```
 
-The first run creates:
+The first check creates:
 
 ```text
 .livedoc/code_signatures.json
 ```
 
-Commit this file to the repository. It is the baseline that future runs compare against.
+Commit this file to the repository. It is the baseline that future checks compare against.
 
-### 4. Change the linked code
+### 5. Check documentation after code changes
 
-For example:
-
-```python
-def add(a: int, b: int, clamp: bool = False) -> int:
-    ...
-```
-
-Run LiveDoc again:
+After changing the linked function or method, run:
 
 ```bash
 livedoc . --docs docs
 ```
 
-LiveDoc reports the linked documentation section as possibly outdated and shows what changed.
+LiveDoc reports the connected documentation section as possibly outdated and shows what changed.
 
-### 5. Update the baseline after reviewing the docs
+### 6. Update the baseline after reviewing the docs
 
 After intentionally changing the API and updating its documentation:
 
@@ -144,7 +158,7 @@ After intentionally changing the API and updating its documentation:
 livedoc . --docs docs --update
 ```
 
-Commit the updated `.livedoc/code_signatures.json` file together with the code and documentation changes.
+Commit the updated `.livedoc/code_signatures.json` together with the code and documentation changes.
 
 ## Anchor Format
 
@@ -263,22 +277,19 @@ Empty lines and lines beginning with `#` are ignored.
 
 ## Command-Line Usage
 
-```text
-usage: livedoc [-h] [--version] [--docs DOCS] [--update]
-               [--ignore PATTERN] [--format {text,json}] [--quiet]
-               [path]
-
-usage: livedoc symbols [-h] [--ignore PATTERN]
-                       [--format {text,json}] [path]
-```
-
-Common commands:
+Main commands:
 
 ```bash
-# Discover reusable code_id values before writing anchors
+# Initialize configuration and starter documentation
+livedoc init .
+
+# Initialize with a custom documentation directory
+livedoc init . --docs documentation
+
+# List discovered symbols and reusable code_id values
 livedoc symbols .
 
-# Produce a machine-readable symbol inventory
+# List symbols as JSON
 livedoc symbols . --format json
 
 # Scan the current project using docs/
@@ -290,7 +301,7 @@ livedoc . --docs documentation
 # Add ignored paths
 livedoc . --ignore tests --ignore generated
 
-# Produce machine-readable output
+# Produce machine-readable check output
 livedoc . --format json
 
 # Reduce non-essential output in CI
@@ -502,7 +513,6 @@ PyPI token authentication uses `__token__` as the username and the API token as 
 
 Possible future improvements:
 
-- easier project initialization
 - richer pull-request annotations
 - additional language parsers
 - IDE and LSP integration

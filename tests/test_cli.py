@@ -251,6 +251,23 @@ def test_main_version(
     assert capsys.readouterr().out.strip() == "livedoc 0.1.8"
 
 
+def test_main_help_mentions_symbols_command(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    from livedoc.cli import main
+
+    monkeypatch.setattr(sys, "argv", ["livedoc", "--help"])
+    with pytest.raises(SystemExit) as exc_info:
+        main()
+
+    assert exc_info.value.code == 0
+    output = capsys.readouterr().out
+    assert "symbols [path]" in output
+    assert "livedoc symbols ." in output
+    assert "livedoc symbols . --format json" in output
+
+
 def test_main_reports_invalid_signature_baseline_without_traceback(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

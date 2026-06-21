@@ -31,6 +31,7 @@ On the first run, LiveDoc stores the current code signatures. On later runs, it 
 - Validates that every documented `code_id` exists in the scanned project
 - Reports the source file and line of changed symbols
 - Detects duplicate `code_id` values
+- Lists reusable `code_id` values with `livedoc symbols`
 - Supports text and JSON output
 - Supports project configuration through `.livedoc.json`
 - Supports path exclusions through `.livedocignore` and `--ignore`
@@ -75,7 +76,23 @@ LiveDoc requires Python 3.10 or newer.
 
 ## Quick Start
 
-### 1. Add an anchor to Markdown
+### 1. Discover available symbols
+
+From the project root, list the symbols LiveDoc can reference:
+
+```bash
+livedoc symbols .
+```
+
+The command prints each reusable `code_id`, its detailed signature, and its source location. Use JSON output for scripts and integrations:
+
+```bash
+livedoc symbols . --format json
+```
+
+The command respects `.livedocignore`, configured `ignore` paths, command-line `--ignore` values, and `ignore_code_ids`. It does not require a `docs/` directory or create a signature baseline.
+
+### 2. Add an anchor to Markdown
 
 Create a documentation file under `docs/` and place a LiveDoc anchor before the section it describes:
 
@@ -86,7 +103,7 @@ Create a documentation file under `docs/` and place a LiveDoc anchor before the 
 Adds two numbers and returns an integer.
 ```
 
-### 2. Run LiveDoc for the first time
+### 3. Run LiveDoc for the first time
 
 From the project root:
 
@@ -102,7 +119,7 @@ The first run creates:
 
 Commit this file to the repository. It is the baseline that future runs compare against.
 
-### 3. Change the linked code
+### 4. Change the linked code
 
 For example:
 
@@ -119,7 +136,7 @@ livedoc . --docs docs
 
 LiveDoc reports the linked documentation section as possibly outdated and shows what changed.
 
-### 4. Update the baseline after reviewing the docs
+### 5. Update the baseline after reviewing the docs
 
 After intentionally changing the API and updating its documentation:
 
@@ -250,11 +267,20 @@ Empty lines and lines beginning with `#` are ignored.
 usage: livedoc [-h] [--version] [--docs DOCS] [--update]
                [--ignore PATTERN] [--format {text,json}] [--quiet]
                [path]
+
+usage: livedoc symbols [-h] [--ignore PATTERN]
+                       [--format {text,json}] [path]
 ```
 
 Common commands:
 
 ```bash
+# Discover reusable code_id values before writing anchors
+livedoc symbols .
+
+# Produce a machine-readable symbol inventory
+livedoc symbols . --format json
+
 # Scan the current project using docs/
 livedoc .
 
@@ -476,7 +502,7 @@ PyPI token authentication uses `__token__` as the username and the API token as 
 
 Possible future improvements:
 
-- easier project initialization and symbol discovery commands
+- easier project initialization
 - richer pull-request annotations
 - additional language parsers
 - IDE and LSP integration

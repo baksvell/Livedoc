@@ -125,14 +125,14 @@ def test_parse_python_module_ignores_tests() -> None:
 
 
 def test_load_livedocignore() -> None:
-    from livedoc.cli import _load_livedocignore
+    from livedoc.core.discovery import load_livedocignore
 
     import tempfile
     with tempfile.TemporaryDirectory() as d:
         root = Path(d)
         ignore_file = root / ".livedocignore"
         ignore_file.write_text("build\n# comment\nscripts\n", encoding="utf-8")
-        patterns = _load_livedocignore(root)
+        patterns = load_livedocignore(root)
         assert "build" in patterns
         assert "scripts" in patterns
         assert "#" not in "".join(patterns)

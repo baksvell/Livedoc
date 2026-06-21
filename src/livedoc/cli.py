@@ -1,4 +1,4 @@
-"""CLI: livedoc check [project path]."""
+"""Command-line interface for LiveDoc."""
 
 from __future__ import annotations
 
@@ -106,6 +106,74 @@ def _filter_stored_signatures(
         },
     )
 
+
+def _relative_source_location(entity_path: Path, project_root: Path) -> str:
+    """Return a stable user-facing path relative to the project root when possible."""
+    try:
+        return entity_path.resolve().relative_to(project_root.resolve()).as_posix()
+    except ValueError:
+        return entity_path.resolve().as_posix()
+
+
+def run_symbols(
+    project_root: Path,
+    ignore_patterns: tuple[str, ...] = (),
+    ignore_code_ids: tuple[str, ...] = (),
+    output_format: str = "text",
+) -> int:
+    """Discover code entities and print reusable ``code_id`` values."""
+    root = project_root.resolve()
+    if not root.exists():
+        return _emit_error(f"project path not found: {root}", output_format)
+    if not root.is_dir():
+        return _emit_error(f"project path is not a directory: {root}", output_format)
+
+    try:
+        entities = discover_code_entities(root, ignore_patterns)
+    except (OSError, UnicodeError, SyntaxError) as exc:
+        return _emit_error(_exception_message(exc, "source code"), output_format)
+
+    duplicates = find_duplicate_code_ids(entities)
+    if duplicates:
+        return _emit_error(format_duplicate_code_ids(duplicates, root), output_format)
+
+    entities = filter_code_entities(entities, ignore_code_ids)
+    entities.sort(key=lambda entity: entity.code_id)
+
+    symbols = [
+        {
+            "code_id": entity.code_id,
+            "signature": entity.format_signature(detailed=True),
+            "file": _relative_source_location(entity.file_path, root),
+            "line": entity.line,
+        }
+        for entity in entities
+    ]
+
+    if output_format == "json":
+        print(
+            json.dumps(
+                {
+                    "ok": True,
+                    "count": len(symbols),
+                    "symbols": symbols,
+                },
+                indent=2,
+                ensure_ascii=False,
+            )
+        )
+        return 0
+
+    if not symbols:
+        print("No symbols found.")
+        return 0
+
+    print(f"Found {len(symbols)} symbol{'s' if len(symbols) != 1 else ''}:")
+    for symbol in symbols:
+        print(symbol["code_id"])
+        print(f"  Signature: {symbol['signature']}")
+        print(f"  Location: {symbol['file']}:{symbol['line']}")
+    return 0
 
 def run_check(
     project_root: Path,
@@ -215,32 +283,14 @@ def run_check(
     return 0
 
 
-def main() -> int:
-    parser = argparse.ArgumentParser(
-        prog="livedoc",
-        description="Living Documentation: check doc freshness",
-    )
-    parser.add_argument(
-        "--version",
-        action="version",
-        version=f"%(prog)s {__version__}",
-    )
+def _add_common_discovery_arguments(parser: argparse.ArgumentParser) -> None:
+    """Add arguments shared by commands that scan source files."""
     parser.add_argument(
         "path",
         nargs="?",
         default=".",
         type=Path,
         help="Project root (default: current directory)",
-    )
-    parser.add_argument(
-        "--docs",
-        default=argparse.SUPPRESS,
-        help=f"Documentation folder (default: from config or {DEFAULT_DOCS_DIR})",
-    )
-    parser.add_argument(
-        "--update",
-        action="store_true",
-        help="After check, update stored signatures (mark docs as up to date)",
     )
     parser.add_argument(
         "--ignore",
@@ -255,21 +305,79 @@ def main() -> int:
         default=argparse.SUPPRESS,
         help="Output format: text or json (default: from config or text)",
     )
-    parser.add_argument(
-        "--quiet",
-        action="store_true",
-        help="Reduce non-essential output (still shows errors and failures).",
-    )
-    args = parser.parse_args()
+
+
+def _resolve_discovery_options(
+    args: argparse.Namespace,
+) -> tuple[Path, tuple[str, ...], tuple[str, ...], str]:
+    """Load config and merge it with CLI discovery options."""
     root = Path(args.path).resolve()
     config = load_config(root)
-    docs = getattr(args, "docs", None) or config.get("docs", DEFAULT_DOCS_DIR)
     output_format = getattr(args, "format", None) or config.get("format", "text")
     ignore_cli = tuple(args.ignore) if args.ignore else ()
     ignore_config = tuple(config.get("ignore", []))
     ignore = ignore_config + ignore_cli
     ignore_code_ids = tuple(config.get("ignore_code_ids", []))
-    return run_check(args.path, docs, args.update, ignore, ignore_code_ids, output_format, args.quiet)
+    return root, ignore, ignore_code_ids, output_format
+
+
+def _build_symbols_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(
+        prog="livedoc symbols",
+        description="List discovered code symbols and their reusable code_id values",
+    )
+    _add_common_discovery_arguments(parser)
+    return parser
+
+
+def _run_symbols_command(argv: list[str]) -> int:
+    args = _build_symbols_parser().parse_args(argv)
+    root, ignore, ignore_code_ids, output_format = _resolve_discovery_options(args)
+    return run_symbols(root, ignore, ignore_code_ids, output_format)
+
+
+def _build_check_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(
+        prog="livedoc",
+        description="Living Documentation: check doc freshness",
+    )
+    parser.add_argument(
+        "--version",
+        action="version",
+        version=f"%(prog)s {__version__}",
+    )
+    _add_common_discovery_arguments(parser)
+    parser.add_argument(
+        "--docs",
+        default=argparse.SUPPRESS,
+        help=f"Documentation folder (default: from config or {DEFAULT_DOCS_DIR})",
+    )
+    parser.add_argument(
+        "--update",
+        action="store_true",
+        help="After check, update stored signatures (mark docs as up to date)",
+    )
+    parser.add_argument(
+        "--quiet",
+        action="store_true",
+        help="Reduce non-essential output (still shows errors and failures).",
+    )
+    return parser
+
+
+def _run_check_command(argv: list[str]) -> int:
+    args = _build_check_parser().parse_args(argv)
+    root, ignore, ignore_code_ids, output_format = _resolve_discovery_options(args)
+    config = load_config(root)
+    docs = getattr(args, "docs", None) or config.get("docs", DEFAULT_DOCS_DIR)
+    return run_check(root, docs, args.update, ignore, ignore_code_ids, output_format, args.quiet)
+
+
+def main() -> int:
+    argv = sys.argv[1:]
+    if argv and argv[0] == "symbols":
+        return _run_symbols_command(argv[1:])
+    return _run_check_command(argv)
 
 
 if __name__ == "__main__":

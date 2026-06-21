@@ -2,6 +2,27 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.2.0] - 2026-06-21
+
+### Added
+
+* Added `livedoc symbols [path]` for discovering reusable `code_id` values
+* Added text and JSON output for discovered symbols, including signatures, source files, and line numbers
+* Added `livedoc init [path]` for initializing LiveDoc in a project
+* Added generation of `.livedoc.json`, a documentation directory, and a starter `README.md`
+* Added `--docs` support for choosing a custom documentation directory during initialization
+* Added `--force` support for explicitly replacing generated initialization files
+* Added shared source-code discovery used by documentation checks and symbol listing
+* Added tests for discovery, symbol listing, initialization, repeated runs, and safe overwrite behavior
+
+### Changed
+
+* The Quick Start now begins with `livedoc init .`
+* CLI help now lists the `init` and `symbols` commands with usage examples
+* New users can discover valid `code_id` values without constructing them manually
+* Initialization refuses to create the documentation directory outside the selected project
+* Existing documentation-check behavior remains backward compatible
+
 ## [0.1.8] - 2026-06-21
 
 ### Added

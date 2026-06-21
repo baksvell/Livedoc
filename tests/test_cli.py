@@ -241,6 +241,7 @@ def test_main_version(
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
+    from livedoc import __version__
     from livedoc.cli import main
 
     monkeypatch.setattr(sys, "argv", ["livedoc", "--version"])
@@ -248,7 +249,7 @@ def test_main_version(
         main()
 
     assert exc_info.value.code == 0
-    assert capsys.readouterr().out.strip() == "livedoc 0.1.8"
+    assert capsys.readouterr().out.strip() == f"livedoc {__version__}"
 
 
 def test_main_help_mentions_symbols_command(

@@ -263,6 +263,8 @@ def test_main_help_mentions_symbols_command(
 
     assert exc_info.value.code == 0
     output = capsys.readouterr().out
+    assert "init [path]" in output
+    assert "livedoc init ." in output
     assert "symbols [path]" in output
     assert "livedoc symbols ." in output
     assert "livedoc symbols . --format json" in output

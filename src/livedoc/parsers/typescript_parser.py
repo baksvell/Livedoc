@@ -39,6 +39,32 @@ def _normalize_param(param: str) -> str:
     return param.split(":")[0].strip().split("=")[0].strip()
 
 
+def _normalize_param_signature(param: str) -> str:
+    """Extract param with type/default details, normalized for stable hashing."""
+    original = param.strip()
+    name = _normalize_param(original)
+    if not name or name == "?":
+        return name
+    if original.startswith("{") or original.startswith("["):
+        # Destructuring can be noisy; keep normalized name to avoid unstable hashes.
+        return name
+    default_expr = ""
+    if "=" in original:
+        before_default, after_default = original.split("=", 1)
+        original = before_default.strip()
+        default_expr = re.sub(r"\s+", " ", after_default.strip())
+    type_expr = ""
+    if ":" in original:
+        _, raw_type = original.split(":", 1)
+        type_expr = re.sub(r"\s+", " ", raw_type.strip())
+    sig = name
+    if type_expr:
+        sig = f"{sig}: {type_expr}"
+    if default_expr:
+        sig = f"{sig} = {default_expr}"
+    return sig
+
+
 def _split_top_level_commas(text: str) -> list[str]:
     """Split by commas, ignoring commas inside (), {}, [], <> and strings."""
     parts: list[str] = []
@@ -158,6 +184,101 @@ def _find_matching_paren(source: str, open_idx: int) -> int:
     return -1
 
 
+def _nesting_depths(source: str) -> list[tuple[int, int, int]]:
+    """Return brace/paren/bracket depth before every character in source."""
+    depths: list[tuple[int, int, int]] = []
+    brace = paren = bracket = 0
+    in_single = in_double = in_backtick = False
+    in_line_comment = in_block_comment = False
+    escaped = False
+    index = 0
+
+    while index < len(source):
+        depths.append((brace, paren, bracket))
+        char = source[index]
+        next_char = source[index + 1] if index + 1 < len(source) else ""
+
+        if in_line_comment:
+            if char == "\n":
+                in_line_comment = False
+            index += 1
+            continue
+        if in_block_comment:
+            if char == "*" and next_char == "/":
+                depths.append((brace, paren, bracket))
+                in_block_comment = False
+                index += 2
+            else:
+                index += 1
+            continue
+        if escaped:
+            escaped = False
+            index += 1
+            continue
+        if char == "\\" and (in_single or in_double or in_backtick):
+            escaped = True
+            index += 1
+            continue
+        if in_single:
+            if char == "'":
+                in_single = False
+            index += 1
+            continue
+        if in_double:
+            if char == '"':
+                in_double = False
+            index += 1
+            continue
+        if in_backtick:
+            if char == "`":
+                in_backtick = False
+            index += 1
+            continue
+
+        if char == "/" and next_char == "/":
+            depths.append((brace, paren, bracket))
+            in_line_comment = True
+            index += 2
+            continue
+        if char == "/" and next_char == "*":
+            depths.append((brace, paren, bracket))
+            in_block_comment = True
+            index += 2
+            continue
+        if char == "'":
+            in_single = True
+        elif char == '"':
+            in_double = True
+        elif char == "`":
+            in_backtick = True
+        elif char == "{":
+            brace += 1
+        elif char == "}":
+            brace = max(0, brace - 1)
+        elif char == "(":
+            paren += 1
+        elif char == ")":
+            paren = max(0, paren - 1)
+        elif char == "[":
+            bracket += 1
+        elif char == "]":
+            bracket = max(0, bracket - 1)
+        index += 1
+
+    depths.append((brace, paren, bracket))
+    return depths
+
+
+def _is_top_level_member(source: str, start: int, depths: list[tuple[int, int, int]]) -> bool:
+    """Return whether a candidate starts at class-body top level."""
+    if depths[start] != (0, 0, 0):
+        return False
+    previous = start - 1
+    while previous >= 0 and source[previous].isspace():
+        previous -= 1
+    return previous < 0 or source[previous] not in ".@"
+
+
 def _return_before(source: str, start: int, stop_char: str) -> str:
     """Extract ': Type' between start and next stop_char, if present."""
     end = source.find(stop_char, start)
@@ -208,7 +329,9 @@ def _find_functions(source: str, module_path: str, file_path: Path) -> list[Code
             continue
         args_str = source[open_idx + 1 : close_idx]
         ret = _return_before(source, close_idx + 1, "{")
-        args = [_normalize_param(p) for p in _split_top_level_commas(args_str) if p.strip()]
+        params = [p for p in _split_top_level_commas(args_str) if p.strip()]
+        args = [_normalize_param(p) for p in params]
+        signature_args = [_normalize_param_signature(p) for p in params]
         line = source[: m.start()].count("\n") + 1
         entities.append(
             CodeEntity(
@@ -218,6 +341,7 @@ def _find_functions(source: str, module_path: str, file_path: Path) -> list[Code
                 return_annotation=ret,
                 file_path=file_path,
                 line=line,
+                signature_args=signature_args,
             )
         )
     # const/let name = (params) => or const/let name = (params): Type =>
@@ -236,7 +360,9 @@ def _find_functions(source: str, module_path: str, file_path: Path) -> list[Code
             between = after[:arrow_pos].strip()
             if between.startswith(":"):
                 ret = between[1:].strip()
-        args = [_normalize_param(p) for p in _split_top_level_commas(args_str) if p.strip()]
+        params = [p for p in _split_top_level_commas(args_str) if p.strip()]
+        args = [_normalize_param(p) for p in params]
+        signature_args = [_normalize_param_signature(p) for p in params]
         line = source[: m.start()].count("\n") + 1
         entities.append(
             CodeEntity(
@@ -246,6 +372,7 @@ def _find_functions(source: str, module_path: str, file_path: Path) -> list[Code
                 return_annotation=ret,
                 file_path=file_path,
                 line=line,
+                signature_args=signature_args,
             )
         )
     return entities
@@ -268,9 +395,15 @@ def _find_classes_and_methods(source: str, module_path: str, file_path: Path) ->
                 brace_depth -= 1
             i += 1
         class_body = source[start:i]
-        # Find methods: name(...) { or async name(...) { (inside class body)
-        method_pattern = r"(?:async\s+)?(\w+)\s*\("
+        depths = _nesting_depths(class_body)
+        # Match only declarations at class-body top level, never calls inside methods.
+        method_pattern = (
+            r"(?:(?:public|private|protected|static|abstract|override|declare|async|get|set)\s+)*"
+            r"([A-Za-z_$][\w$]*)\s*(?:<[^>{}()]*>)?\s*\("
+        )
         for m in re.finditer(method_pattern, class_body):
+            if not _is_top_level_member(class_body, m.start(), depths):
+                continue
             name = m.group(1)
             if name == "constructor":
                 continue
@@ -280,9 +413,12 @@ def _find_classes_and_methods(source: str, module_path: str, file_path: Path) ->
                 continue
             args_str = source[open_idx + 1 : close_idx]
             ret = _return_before(source, close_idx + 1, "{")
-            args = [_normalize_param(p) for p in _split_top_level_commas(args_str) if p.strip()]
+            params = [p for p in _split_top_level_commas(args_str) if p.strip()]
+            args = [_normalize_param(p) for p in params]
+            signature_args = [_normalize_param_signature(p) for p in params]
             if "this" in args:
                 args = [a for a in args if a != "this"]
+                signature_args = [a for a in signature_args if not a.startswith("this")]
             line = source[: m.start() + class_match.end()].count("\n") + 1
             entities.append(
                 CodeEntity(
@@ -292,6 +428,7 @@ def _find_classes_and_methods(source: str, module_path: str, file_path: Path) ->
                     return_annotation=ret,
                     file_path=file_path,
                     line=line,
+                    signature_args=signature_args,
                 )
             )
     return entities
@@ -338,7 +475,6 @@ def _find_type_aliases(source: str, module_path: str, file_path: Path) -> list[C
         name = m.group(1)
         rest = source[m.end() :]
         # Extract type expression: balance braces/parens, stop at ; or \n\n or next keyword
-        depth = 0
         in_brace, in_paren, in_bracket = 0, 0, 0
         i = 0
         while i < len(rest):
@@ -384,7 +520,13 @@ def parse_typescript_file(file_path: Path, module_path: str) -> list[CodeEntity]
     entities.extend(_find_classes_and_methods(source, module_path, file_path))
     entities.extend(_find_interfaces(source, module_path, file_path))
     entities.extend(_find_type_aliases(source, module_path, file_path))
-    return entities
+
+    # TypeScript overloads can produce the same code_id multiple times. Keep the
+    # last declaration, which is normally the concrete implementation.
+    unique_entities: dict[str, CodeEntity] = {}
+    for entity in entities:
+        unique_entities[entity.code_id] = entity
+    return list(unique_entities.values())
 
 
 def _is_ignored(rel_path: Path, ignore_patterns: tuple[str, ...]) -> bool:

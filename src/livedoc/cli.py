@@ -4,13 +4,15 @@ from __future__ import annotations
 
 import argparse
 import fnmatch
+import json
 import sys
 from pathlib import Path
 
+from livedoc import __version__
 from livedoc.config import load_config
 from livedoc.core.graph import DocGraph, find_unknown_anchor_refs
 from livedoc.core.graph import DocFragment
-from livedoc.core.signatures import CodeSignatures
+from livedoc.core.signatures import CodeEntity, CodeSignatures
 from livedoc.parsers.doc_parser import parse_doc_anchors
 from livedoc.parsers.python_parser import (
     build_current_signatures,
@@ -24,6 +26,61 @@ from livedoc.report.reporter import report_outdated
 DEFAULT_DOCS_DIR = "docs"
 SIGNATURES_FILE = ".livedoc/code_signatures.json"
 LIVEDOCIGNORE_FILE = ".livedocignore"
+
+
+def _emit_error(message: str, output_format: str) -> int:
+    """Print a user-facing error without exposing an internal traceback."""
+    if output_format == "json":
+        print(
+            json.dumps(
+                {
+                    "ok": False,
+                    "error": message,
+                    "outdated": [],
+                    "unknown_anchors": [],
+                },
+                indent=2,
+                ensure_ascii=False,
+            )
+        )
+    else:
+        print(f"LiveDoc error: {message}", file=sys.stderr)
+    return 2
+
+
+def _exception_message(exc: Exception, context: str) -> str:
+    """Convert parser, filesystem and JSON exceptions into concise messages."""
+    if isinstance(exc, SyntaxError):
+        location = exc.filename or context
+        if exc.lineno is not None:
+            location = f"{location}:{exc.lineno}"
+        return f"cannot parse Python file {location}: {exc.msg}"
+    if isinstance(exc, json.JSONDecodeError):
+        return f"invalid JSON in {context} at line {exc.lineno}, column {exc.colno}"
+    return f"{context}: {exc}"
+
+
+def _duplicate_code_ids(entities: list[CodeEntity]) -> dict[str, list[CodeEntity]]:
+    """Return code IDs that resolve to more than one code entity."""
+    grouped: dict[str, list[CodeEntity]] = {}
+    for entity in entities:
+        grouped.setdefault(entity.code_id, []).append(entity)
+    return {code_id: matches for code_id, matches in grouped.items() if len(matches) > 1}
+
+
+def _format_duplicate_code_ids(duplicates: dict[str, list[CodeEntity]], root: Path) -> str:
+    """Format duplicate code IDs with their source locations."""
+    details: list[str] = []
+    for code_id in sorted(duplicates):
+        locations: list[str] = []
+        for entity in duplicates[code_id]:
+            try:
+                path = entity.file_path.resolve().relative_to(root.resolve())
+            except ValueError:
+                path = entity.file_path
+            locations.append(f"{path.as_posix()}:{entity.line}")
+        details.append(f"{code_id} ({', '.join(locations)})")
+    return "duplicate code_id values detected: " + "; ".join(details)
 
 
 def _load_livedocignore(root: Path) -> tuple[str, ...]:
@@ -109,8 +166,7 @@ def run_check(
     code_path = root
     docs_path = root / docs_dir
     if not docs_path.exists():
-        print(f"Documentation folder not found: {docs_path}", file=sys.stderr)
-        return 2
+        return _emit_error(f"documentation folder not found: {docs_path}", output_format)
 
     # Parse code (Python + TypeScript/JavaScript + Go)
     from livedoc.parsers.python_parser import DEFAULT_IGNORE
@@ -120,9 +176,17 @@ def run_check(
     if ignore_patterns:
         ignore.extend(ignore_patterns)
     ignore_tuple = tuple(ignore)
-    entities = parse_python_module(root, code_path, ignore_patterns=ignore_tuple)
-    entities.extend(parse_typescript_module(root, code_path, ignore_tuple))
-    entities.extend(parse_go_module(root, code_path, ignore_tuple))
+    try:
+        entities = parse_python_module(root, code_path, ignore_patterns=ignore_tuple)
+        entities.extend(parse_typescript_module(root, code_path, ignore_tuple))
+        entities.extend(parse_go_module(root, code_path, ignore_tuple))
+    except (OSError, UnicodeError, SyntaxError) as exc:
+        return _emit_error(_exception_message(exc, "source code"), output_format)
+
+    duplicates = _duplicate_code_ids(entities)
+    if duplicates:
+        return _emit_error(_format_duplicate_code_ids(duplicates, root), output_format)
+
     if ignore_code_ids:
         entities = [
             entity
@@ -131,10 +195,13 @@ def run_check(
         ]
     current_sigs = build_current_signatures(entities)
     entities_by_id = {e.code_id: e for e in entities}
-    current_readable = {e.code_id: e.format_signature() for e in entities}
+    current_readable = {e.code_id: e.format_signature(detailed=True) for e in entities}
 
     # Parse docs
-    fragments = _filter_doc_fragments(parse_doc_anchors(docs_path), ignore_code_ids)
+    try:
+        fragments = _filter_doc_fragments(parse_doc_anchors(docs_path), ignore_code_ids)
+    except (OSError, UnicodeError) as exc:
+        return _emit_error(_exception_message(exc, "documentation"), output_format)
     graph = DocGraph()
     for f in fragments:
         for code_id in f.code_ids:
@@ -144,7 +211,10 @@ def run_check(
 
     # Load stored signatures
     sig_path = root / SIGNATURES_FILE
-    stored = _filter_stored_signatures(CodeSignatures.load(sig_path), ignore_code_ids)
+    try:
+        stored = _filter_stored_signatures(CodeSignatures.load(sig_path), ignore_code_ids)
+    except (OSError, UnicodeError, json.JSONDecodeError, ValueError) as exc:
+        return _emit_error(_exception_message(exc, str(sig_path)), output_format)
 
     if stored is None:
         # First run: save current state
@@ -173,7 +243,7 @@ def run_check(
     for code_id in changed:
         old_sig = stored.get_readable(code_id)
         if code_id in entities_by_id:
-            new_sig = entities_by_id[code_id].format_signature()
+            new_sig = entities_by_id[code_id].format_signature(detailed=True)
         else:
             new_sig = None  # entity removed
         changes[code_id] = (old_sig, new_sig)
@@ -202,7 +272,15 @@ def run_check(
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Living Documentation: check doc freshness")
+    parser = argparse.ArgumentParser(
+        prog="livedoc",
+        description="Living Documentation: check doc freshness",
+    )
+    parser.add_argument(
+        "--version",
+        action="version",
+        version=f"%(prog)s {__version__}",
+    )
     parser.add_argument(
         "path",
         nargs="?",

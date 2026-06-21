@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "living-doc"
-version = "0.1.7"
+dynamic = ["version"]
 description = "Living Documentation: link docs to code and check freshness when signatures change"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -28,6 +28,8 @@ dev = [
     "pytest>=7",
     "ruff>=0.1",
     "pre-commit>=3.0",
+    "build>=1.2",
+    "twine>=5.0",
 ]
 
 [project.scripts]
@@ -39,6 +41,9 @@ Repository = "https://github.com/baksvell/Livedoc"
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.setuptools.dynamic]
+version = {attr = "livedoc.__version__"}
 
 [tool.ruff]
 line-length = 100

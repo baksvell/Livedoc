@@ -1,181 +1,340 @@
-# Living Documentation
+# LiveDoc — Living Documentation for Code
 
 [![Living Documentation Check](https://github.com/baksvell/Livedoc/actions/workflows/livedoc.yml/badge.svg)](https://github.com/baksvell/Livedoc/actions/workflows/livedoc.yml)
 [![PyPI](https://img.shields.io/pypi/v/living-doc.svg)](https://pypi.org/project/living-doc/)
+[![Python](https://img.shields.io/pypi/pyversions/living-doc.svg)](https://pypi.org/project/living-doc/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-A tool that links documentation to code so it stays up to date. When function signatures, APIs, or arguments change, the system marks related documentation paragraphs as "possibly outdated" and suggests what to fix.
+LiveDoc links Markdown documentation to code symbols and warns when the linked code changes.
 
-## Goals
+When a function, method, interface, type alias, or Go symbol changes, LiveDoc identifies the related documentation fragment and marks it as **possibly outdated**. This helps teams keep documentation close to the code and verify documentation freshness in local development, pre-commit hooks, and CI.
 
-- **Code ↔ doc linking**: explicit mapping between code entities (functions, classes, APIs) and documentation fragments
-- **Freshness checking**: after code changes — mark outdated sections and suggest updates
-- **Contextual view** (planned): show the relevant doc fragment in the IDE when hovering over a function or method call
-- **Docs next to code**: store documentation in the repository and view it as a site with navigation and search
+## Why LiveDoc?
 
-## Where to Start (recommendation)
+Documentation often becomes outdated after code changes. Tests can verify behavior, but they usually cannot tell whether a README, guide, or API description still matches the current function signature.
 
-Recommended order:
+LiveDoc adds an explicit link between a Markdown section and a code symbol:
 
-1. **Code ↔ documentation mapping format** — without it, you can't unambiguously link a doc paragraph to a code entity. Define this first.
-2. **Repository structure and stack** — Python, TypeScript/JavaScript, and Go for MVP, shared architecture for future languages and IDE support.
-3. **Prototype on one example** — one module, one doc page, code parser, and a check that "the document is outdated after a code change."
+```markdown
+<!-- livedoc: code_id = "mymodule.calc:add" -->
+## `add`
 
-In short: **first the format and structure, then a minimal prototype**.
-
-## Architecture Overview
-
-```
-┌─────────────────┐     ┌──────────────────┐     ┌─────────────────────┐
-│  Code parser    │────▶│  Link graph      │◀────│  Doc parser         │
-│  (AST / API)    │     │  (code_id ↔ doc) │     │  (markdown + anchors)│
-└────────┬────────┘     └────────┬──────────┘     └─────────────────────┘
-         │                      │
-         ▼                      ▼
-┌─────────────────┐     ┌──────────────────┐
-│  Change         │     │  Report / site   │
-│  detector       │────▶│  "outdated" +    │
-│  (diff / hash)  │     │  suggestions     │
-└─────────────────┘     └──────────────────┘
+Adds two numbers and returns the result.
 ```
 
-- **Code parser**: extracts signatures (name, arguments, types) and unique identifiers. Supports **Python**, **TypeScript/JavaScript**, and **Go**.
-- **Doc parser**: parses Markdown with explicit anchors (see `spec/code-doc-mapping.md`), associating paragraphs/blocks with `code_id`.
-- **Link graph**: stores (code_id, doc_fragment_id) pairs. When code changes (new signature/hash), related fragments are marked as "possibly outdated."
-- **Change detector**: compares current code state (signatures/hashes) with the last saved state.
+On the first run, LiveDoc stores the current code signatures. On later runs, it compares the current code with the stored baseline and reports documentation connected to changed symbols.
 
-Extensibility: code and doc parsers are per-language plugins; the graph and report are shared.
+## Features
 
-## Documentation Format
-
-- **Primary format**: Markdown in the repository (e.g., a `docs/` folder or next to modules).
-- **Linking to code**: anchors in Markdown (see `spec/code-doc-mapping.md`), optionally plus annotations in code (docstring tags) that reference a fragment id.
-- **Site**: generate a static site (MkDocs, Docusaurus, or custom) from the same Markdown files; navigation and search on top of the generated site.
+- Links Markdown sections to code through invisible HTML comment anchors
+- Detects signature changes that may make documentation outdated
+- Validates that every documented `code_id` exists in the scanned project
+- Reports the source file and line of changed symbols
+- Detects duplicate `code_id` values
+- Supports text and JSON output
+- Supports project configuration through `.livedoc.json`
+- Supports path exclusions through `.livedocignore` and `--ignore`
+- Works locally, in pre-commit hooks, and in CI
+- Has no required runtime dependencies
 
 ## Supported Languages
 
-- **Python**: functions, class methods (`module.path:name` or `module.path:Class.method`)
-- **TypeScript/JavaScript**: functions, arrow functions, classes, methods, interfaces, type aliases (`.ts`, `.tsx`, `.js`, `.jsx`). Supports destructuring params. Excludes `*.d.ts`, `*.test.*`, `*.spec.*`, `node_modules`, `dist`, `build`.
-- **Go**: functions and methods (`.go`). Format: `package:FunctionName` or `package:(*Type).Method`. Excludes `vendor`, `*_test.go`.
+- **Python**: functions, async functions, instance methods, class methods, static methods, positional-only and keyword-only parameters, `*args`, `**kwargs`, type annotations, default values, and return annotations
+- **TypeScript/JavaScript**: functions, arrow functions, classes, methods, overload implementations, interfaces, and type aliases in `.ts`, `.tsx`, `.js`, and `.jsx` files
+- **Go**: functions and methods, including pointer and value receivers
 
-## MVP (First Iteration)
+LiveDoc excludes common generated, dependency, build, and test paths by default. Additional paths can be excluded through configuration or command-line options.
 
-- **Features**:
-  - Parse modules (functions, methods, signatures, and language-specific constructs) for **Python**, **TypeScript/JavaScript**, and **Go**
-  - Documentation (e.g. Markdown) with `livedoc` anchors linking to code entities
-  - Detect outdated doc sections when linked code signatures change; **anchor validation** (each `code_id` must exist in parsed code); **code locations** in reports (`path:line` to the definition)
-- **Extensibility**: abstractions for the code parser and anchor format to support more languages and IDE integration later.
+## Installation
 
-## Repository Structure
-
-```
-LiveDoc/
-├── README.md                 # this file
-├── spec/
-│   └── code-doc-mapping.md  # anchor format and code↔doc mapping
-├── src/
-│   └── livedoc/
-│       ├── __init__.py
-│       ├── core/            # link graph, change detector
-│       ├── parsers/         # Python code parser, doc parser
-│       └── report/          # "outdated" report, future site generation
-├── tests/
-├── examples/                # sample project (Python + TypeScript + Go)
-│   ├── sample_module/       # Python
-│   ├── ts_sample/           # TypeScript
-│   ├── go_sample/           # Go
-│   └── docs/
-└── pyproject.toml
-```
-
-## Quick Start (Add to Your Project)
-
-1. **Install**: `pip install living-doc` (or `pip install -e .` from this repo)
-
-2. **Create docs** in `docs/` with anchors linking to code:
-   ```markdown
-   <!-- livedoc: code_id = "mymodule.calc:add" -->
-   ## add
-   Adds two numbers.
-   ```
-   For TypeScript: `<!-- livedoc: code_id = "src.utils:add" -->` (path.to.file:name or path.to.file:Class.method)
-
-3. **First run** (saves code signatures):
-   ```bash
-   python -m livedoc --docs docs
-   ```
-
-4. **CI**: See [GitHub Actions in your project](#github-actions-in-your-project) for a full workflow you can copy.
-
-5. **Optional**: Add `.livedoc.json` in project root for defaults:
-   ```json
-   {
-     "docs": "docs",
-     "ignore": ["build"],
-     "ignore_code_ids": ["generated.client:*"],
-     "format": "text"
-   }
-   ```
-
-   Use `ignore_code_ids` to exclude specific symbols or glob patterns from checks.
-
-6. **Optional**: Add `.livedocignore` (one pattern per line) to exclude paths:
-   ```
-   build
-   scripts
-   ```
-
-7. **Optional**: Pre-commit hook — add to `.pre-commit-config.yaml`:
-   ```yaml
-   - repo: local
-     hooks:
-       - id: livedoc
-         name: livedoc
-         entry: python -m livedoc
-         language: system
-         pass_filenames: false
-   ```
-   Then: `pip install pre-commit && pre-commit install`
-
-## Running the MVP (This Repo)
+Install the latest release from PyPI:
 
 ```bash
-# Install (optional, for livedoc command)
-pip install -e .
-
-# Check links and freshness for the example (from repo root)
-python -m livedoc examples
-
-# First run saves code signatures to examples/.livedoc/code_signatures.json.
-# After changing a function/method signature, the next run will show
-# related doc fragments as "possibly outdated" with a diff of old vs new signature.
-# To update signatures after editing docs: --update
-
-# Pre-commit (this repo): pre-commit install && pre-commit run livedoc
-
-# Options (CLI overrides .livedoc.json):
-#   --ignore PATTERN   Exclude paths (can be repeated)
-#   --format json      Machine-readable output for CI/scripts
-#   --quiet            Reduce non-essential output (good for CI logs)
-#   .livedoc.json      Config: docs, ignore, ignore_code_ids, format
-#   .livedocignore     File with ignore patterns (one per line)
+pip install living-doc
 ```
 
-## GitHub Actions in your project
+To pin this release:
 
-Use the published package from [PyPI](https://pypi.org/project/living-doc/) so CI matches what developers install locally.
+```bash
+pip install "living-doc==0.1.8"
+```
 
-### Prerequisites
+Check the installed version:
 
-1. Add `livedoc` anchors to your Markdown under the folder you pass as `--docs` (often `docs/`).
-2. Run **once locally** from the repository root:  
-   `pip install living-doc && python -m livedoc . --docs docs`  
-   (adjust `--docs` if your folder differs, or set `"docs": "docs"` in `.livedoc.json` and run `python -m livedoc .`).
-3. **Commit** `.livedoc/code_signatures.json` (created on first run). CI compares future commits to this baseline; without it, the first CI run only saves signatures and passes.
+```bash
+livedoc --version
+```
 
-### Example workflow
+You can also run LiveDoc as a Python module:
 
-Save as `.github/workflows/livedoc.yml` in **your** repository:
+```bash
+python -m livedoc --version
+```
+
+LiveDoc requires Python 3.10 or newer.
+
+## Quick Start
+
+### 1. Add an anchor to Markdown
+
+Create a documentation file under `docs/` and place a LiveDoc anchor before the section it describes:
+
+```markdown
+<!-- livedoc: code_id = "mymodule.calc:add" -->
+## `add`
+
+Adds two numbers and returns an integer.
+```
+
+### 2. Run LiveDoc for the first time
+
+From the project root:
+
+```bash
+livedoc . --docs docs
+```
+
+The first run creates:
+
+```text
+.livedoc/code_signatures.json
+```
+
+Commit this file to the repository. It is the baseline that future runs compare against.
+
+### 3. Change the linked code
+
+For example:
+
+```python
+def add(a: int, b: int, clamp: bool = False) -> int:
+    ...
+```
+
+Run LiveDoc again:
+
+```bash
+livedoc . --docs docs
+```
+
+LiveDoc reports the linked documentation section as possibly outdated and shows what changed.
+
+### 4. Update the baseline after reviewing the docs
+
+After intentionally changing the API and updating its documentation:
+
+```bash
+livedoc . --docs docs --update
+```
+
+Commit the updated `.livedoc/code_signatures.json` file together with the code and documentation changes.
+
+## Anchor Format
+
+LiveDoc anchors are HTML comments, so they do not appear in rendered Markdown.
+
+### One symbol
+
+```markdown
+<!-- livedoc: code_id = "package.module:function_name" -->
+## Function documentation
+```
+
+### Multiple symbols
+
+```markdown
+<!-- livedoc: code_id = "package.module:func_a", "package.module:func_b" -->
+## Related functions
+```
+
+An anchor can be written across multiple lines:
+
+```markdown
+<!-- livedoc:
+     code_id = "package.module:Service.create"
+-->
+## Creating a service
+```
+
+The anchor applies to the following Markdown section.
+
+For the complete mapping specification, see [`spec/code-doc-mapping.md`](spec/code-doc-mapping.md).
+
+## `code_id` Examples
+
+### Python
+
+```text
+mymodule.calc:add
+mymodule.service:UserService.create
+```
+
+Format:
+
+```text
+module.path:function_name
+module.path:ClassName.method_name
+```
+
+### TypeScript and JavaScript
+
+```text
+src.utils:add
+src.services.user:UserService.create
+src.models:User
+```
+
+Format:
+
+```text
+path.to.file:symbol
+path.to.file:ClassName.methodName
+```
+
+### Go
+
+```text
+calculator:Add
+service:(*UserService).Create
+service:UserService.Validate
+```
+
+Format:
+
+```text
+package:FunctionName
+package:(*Type).Method
+package:Type.Method
+```
+
+## Configuration
+
+Create `.livedoc.json` in the project root:
+
+```json
+{
+  "docs": "docs",
+  "ignore": ["build", "generated"],
+  "ignore_code_ids": ["generated.client:*"],
+  "format": "text"
+}
+```
+
+Supported keys:
+
+| Key | Type | Description |
+|---|---|---|
+| `docs` | string | Documentation directory relative to the project root |
+| `ignore` | array of strings | Additional ignored path segments or glob patterns |
+| `ignore_code_ids` | array of strings | Symbol patterns excluded from validation and freshness checks |
+| `format` | `text` or `json` | Default output format |
+
+Command-line options override configuration values where applicable.
+
+## `.livedocignore`
+
+Create `.livedocignore` in the project root to exclude paths, one pattern per line:
+
+```text
+# Generated files
+build
+generated
+scripts/vendor
+```
+
+Empty lines and lines beginning with `#` are ignored.
+
+## Command-Line Usage
+
+```text
+usage: livedoc [-h] [--version] [--docs DOCS] [--update]
+               [--ignore PATTERN] [--format {text,json}] [--quiet]
+               [path]
+```
+
+Common commands:
+
+```bash
+# Scan the current project using docs/
+livedoc .
+
+# Use a custom documentation directory
+livedoc . --docs documentation
+
+# Add ignored paths
+livedoc . --ignore tests --ignore generated
+
+# Produce machine-readable output
+livedoc . --format json
+
+# Reduce non-essential output in CI
+livedoc . --quiet
+
+# Accept reviewed code and documentation changes
+livedoc . --update
+```
+
+## Exit Codes
+
+| Code | Meaning |
+|---:|---|
+| `0` | Documentation is up to date, or the first baseline was created successfully |
+| `1` | Possibly outdated documentation or unknown anchor references were found |
+| `2` | Configuration, parsing, filesystem, baseline, or duplicate-symbol error |
+
+## Reports
+
+### Text output
+
+Text reports include:
+
+- the affected documentation fragment
+- the Markdown file and approximate line
+- the change reason
+- the previous and current signatures
+- the current code location
+
+Example:
+
+```text
+Possibly outdated documentation (code changed):
+
+  * docs/api.md#add
+    File: docs/api.md, line ~1
+    Section: add
+    Reason: param default changed
+    [mymodule.calc:add]  add(a: int, b: int) -> int  ->  add(a: int, b: int = 0) -> int
+    Code: mymodule/calc.py:4
+```
+
+### JSON output
+
+Use:
+
+```bash
+livedoc . --format json
+```
+
+The JSON report contains:
+
+- `ok`
+- `outdated`
+- `unknown_anchors`
+- signature differences
+- parameter-level change details when available
+- code file and line information
+
+JSON output is intended for CI integrations and other developer tools.
+
+## GitHub Actions
+
+Before enabling CI:
+
+1. Add LiveDoc anchors to the Markdown files.
+2. Run LiveDoc locally once.
+3. Commit `.livedoc/code_signatures.json`.
+
+Create `.github/workflows/livedoc.yml`:
 
 ```yaml
 name: Living documentation
@@ -186,88 +345,148 @@ on:
   pull_request:
     branches: [main, master]
 
+permissions:
+  contents: read
+
 jobs:
   livedoc:
     runs-on: ubuntu-latest
+
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout repository
+        uses: actions/checkout@v4
 
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+          cache: pip
 
-      - name: Install living-doc
-        run: pip install living-doc
+      - name: Install LiveDoc
+        run: python -m pip install "living-doc==0.1.8"
 
-      - name: Check doc freshness and anchors
-        run: python -m livedoc . --docs docs
+      - name: Check documentation freshness
+        run: livedoc . --docs docs --quiet
 ```
 
-- Replace `docs` with your docs directory if needed, or rely on `.livedoc.json` (`"docs": "..."`) and use `python -m livedoc .`.
-- To **pin** the version: `pip install "living-doc==0.1.6"`.
-- For **machine-readable** logs: add `--format json` or set `"format": "json"` in `.livedoc.json` (e.g. to parse in a follow-up step).
-- To exclude specific symbols from checks, set `"ignore_code_ids": ["pkg:GeneratedClient", "internal.*:*"]` in `.livedoc.json`.
+Replace `docs` if the project uses a different documentation directory. You can also set the directory in `.livedoc.json` and run `livedoc . --quiet`.
 
-### When CI fails
+## Pre-commit
 
-- **Outdated docs**: update the Markdown or run `python -m livedoc . --docs docs --update` after intentional API changes, then commit the updated `.livedoc/code_signatures.json`.
-- **Unknown anchors**: fix or remove invalid `code_id` values in Markdown (see [Anchor validation](#anchor-validation)).
+Add a local hook to `.pre-commit-config.yaml`:
 
-## Anchor validation
-
-Every `code_id` in a livedoc anchor must match a symbol parsed from your project (Python, TypeScript/JavaScript, Go). If an anchor points to a missing or mistyped id, the check fails with **Unknown code_id references** (exit code 1). The JSON report includes an `unknown_anchors` array.
-
-## Code locations in reports
-
-When documentation is outdated because a linked symbol changed, the text report includes a **Code:** line with the file path (relative to the project root) and line number of the current definition, e.g. `sample_module/calc.py:6`. JSON entries under `code_changes` include `code_file` and `code_line`. Each change also includes a `reason` such as `args changed`, `return type changed`, or `symbol removed`. If the symbol was removed from the codebase, the text report says `(symbol removed from codebase)` instead.
-
-Example JSON fragment:
-
-```json
-{
-  "code_id": "web.service:render",
-  "old_sig": "render(name) -> string",
-  "new_sig": "render(name, locale) -> string",
-  "reason": "args changed",
-  "diff": "render(name) -> string  ->  render(name, locale) -> string",
-  "code_file": "web/service.ts",
-  "code_line": 1
-}
+```yaml
+repos:
+  - repo: local
+    hooks:
+      - id: livedoc
+        name: LiveDoc
+        entry: python -m livedoc
+        language: system
+        pass_filenames: false
 ```
 
-## CI in this repository
+Install the hook:
 
-The workflow [`.github/workflows/livedoc.yml`](.github/workflows/livedoc.yml) installs **this repo in editable mode** (`pip install -e .`) and runs `python -m livedoc examples --docs docs` so CI always uses the current source. The committed [`examples/.livedoc/code_signatures.json`](examples/.livedoc/code_signatures.json) is the baseline; if example code changes without updating docs or signatures, the job fails.
+```bash
+pip install pre-commit
+pre-commit install
+```
+
+Run it manually:
+
+```bash
+pre-commit run livedoc --all-files
+```
+
+## Using LiveDoc in This Repository
+
+Install the project with development dependencies:
+
+```bash
+python -m pip install -e ".[dev]"
+```
+
+Run the quality checks:
+
+```bash
+python -m ruff check .
+python -m pytest -q
+python -m livedoc examples --docs docs
+```
+
+Check the version:
+
+```bash
+python -m livedoc --version
+```
+
+## Repository Structure
+
+```text
+LiveDoc/
+├── .github/workflows/       # CI workflows
+├── examples/                # Python, TypeScript, and Go examples
+├── spec/                    # Code-to-documentation mapping specification
+├── src/livedoc/
+│   ├── core/                # Link graph and signature comparison
+│   ├── parsers/             # Python, TypeScript/JavaScript, Go, and Markdown parsers
+│   ├── report/              # Text and JSON report generation
+│   ├── cli.py               # Command-line interface
+│   └── config.py            # Project configuration loader
+├── tests/                   # Automated tests
+├── CHANGELOG.md
+├── CONTRIBUTING.md
+├── LICENSE
+├── README.md
+└── pyproject.toml
+```
+
+## Development
+
+See [`CONTRIBUTING.md`](CONTRIBUTING.md) for the development setup, testing commands, coding guidelines, and pull request checklist.
+
+The main local checks are:
+
+```bash
+python -m ruff check .
+python -m pytest -q
+python -m build
+python -m twine check dist/*
+```
 
 ## Publishing to PyPI
 
+Build and validate the distributions:
+
 ```bash
-pip install build twine
 python -m build
+python -m twine check dist/*
+```
+
+Upload the release:
+
+```bash
 python -m twine upload dist/*
 ```
 
-Requires a PyPI account and token. Use `__token__` as username and your API token as password.
+PyPI token authentication uses `__token__` as the username and the API token as the password.
 
-## GitHub About (repository homepage)
+## Roadmap
 
-On [github.com/baksvell/Livedoc](https://github.com/baksvell/Livedoc), click **⚙️** next to **About** and set:
+Possible future improvements:
 
-| Field | Suggested value |
-|--------|------------------|
-| **Description** | Link docs to code; flag outdated Markdown when signatures change. |
-| **Website** | https://pypi.org/project/living-doc/ |
-| **Topics** | `documentation`, `living-docs`, `python`, `typescript`, `go`, `golang`, `code-docs`, `markdown`, `developer-tools` |
-
-*(Topics are added one by one in the About editor.)*
-
-## Next Steps
-
-- Add parsers for other languages in `parsers/`
-- IDE integration: LSP or extension (show docs on hover)
-- Generate and serve a documentation site with "outdated" highlights
+- easier project initialization and symbol discovery commands
+- richer pull-request annotations
+- additional language parsers
+- IDE and LSP integration
+- generated documentation views with outdated-section highlighting
+- optional automatic documentation update suggestions
 
 ## Contributing
 
-See [`CONTRIBUTING.md`](CONTRIBUTING.md) for development setup, tests, and PR checklist.
+Contributions, bug reports, and feature requests are welcome. See [`CONTRIBUTING.md`](CONTRIBUTING.md) before opening a pull request.
+
+## License
+
+LiveDoc is distributed under the MIT License. See [`LICENSE`](LICENSE).

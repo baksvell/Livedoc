@@ -1,5 +1,6 @@
 """Tests for parsers and outdated detection."""
 
+import json
 from pathlib import Path
 
 import pytest
@@ -7,17 +8,12 @@ import pytest
 from livedoc.core.graph import DocGraph
 from livedoc.core.signatures import CodeSignatures, signature_hash
 from livedoc.parsers.doc_parser import parse_doc_file
-from livedoc.parsers.python_parser import (
-    build_current_signatures,
-    parse_python_file,
-    parse_python_module,
-)
-from livedoc.parsers.typescript_parser import (
-    parse_typescript_file,
-    parse_typescript_module,
-)
 from livedoc.parsers.go_parser import parse_go_file, parse_go_module
-
+from livedoc.parsers.python_parser import parse_python_file
+from livedoc.parsers.typescript_parser import (
+parse_typescript_file,
+parse_typescript_module,
+)
 
 EXAMPLES_ROOT = Path(__file__).resolve().parent.parent / "examples"
 
@@ -34,9 +30,38 @@ def test_signature_hash_changes_with_args() -> None:
     assert h1 != h2
 
 
+def test_signature_hash_changes_with_arg_order() -> None:
+    h1 = signature_hash("add", ["a", "b"], "int")
+    h2 = signature_hash("add", ["b", "a"], "int")
+    assert h1 != h2
+
+
+def test_code_entity_hash_uses_signature_args() -> None:
+    from livedoc.core.signatures import CodeEntity
+
+    e1 = CodeEntity(
+        code_id="m:add",
+        name="add",
+        args=["a", "b"],
+        return_annotation="int",
+        file_path=Path("x.py"),
+        line=1,
+        signature_args=["a: int", "b: int = 1"],
+    )
+    e2 = CodeEntity(
+        code_id="m:add",
+        name="add",
+        args=["a", "b"],
+        return_annotation="int",
+        file_path=Path("x.py"),
+        line=1,
+        signature_args=["a: int", "b: int = 2"],
+    )
+    assert e1.get_signature_hash() != e2.get_signature_hash()
+
+
 def test_parse_python_file() -> None:
     calc = EXAMPLES_ROOT / "sample_module" / "calc.py"
-    root = EXAMPLES_ROOT
     module_path = "sample_module.calc"
     entities = parse_python_file(calc, module_path)
     code_ids = {e.code_id for e in entities}
@@ -195,7 +220,7 @@ def test_report_outdated_with_changes() -> None:
     assert "m:add" in report
     assert "calc.py:12" in report
     assert "Code:" in report
-    assert "Reason: args changed" in report
+    assert "Reason: params changed" in report
 
 
 def test_report_outdated_json_format() -> None:
@@ -230,7 +255,7 @@ def test_report_outdated_json_format() -> None:
     assert '"ok": false' in report
     assert "api.md#add" in report
     assert "m:add" in report
-    assert '"reason": "args changed"' in report
+    assert '"reason": "params changed"' in report
     assert '"code_file": "m.py"' in report
     assert '"code_line": 7' in report
 
@@ -308,6 +333,206 @@ def test_report_outdated_return_type_reason_in_json() -> None:
     assert '"reason": "return type changed"' in report
 
 
+def test_report_outdated_param_type_reason_in_json() -> None:
+    import tempfile
+    from livedoc.core.graph import DocFragment
+    from livedoc.core.signatures import CodeEntity
+    from livedoc.report.reporter import report_outdated
+
+    with tempfile.TemporaryDirectory() as d:
+        root = Path(d)
+        cf = root / "m.py"
+        cf.write_text("x", encoding="utf-8")
+        f = DocFragment("api.md#convert", Path("api.md"), 5, ["m:convert"], "convert")
+        changes = {"m:convert": ("convert(a: int) -> int", "convert(a: str) -> int")}
+        entities = {
+            "m:convert": CodeEntity(
+                code_id="m:convert",
+                name="convert",
+                args=["a"],
+                return_annotation="int",
+                file_path=cf,
+                line=7,
+            )
+        }
+        report = report_outdated(
+            [f],
+            changes=changes,
+            entities_by_id=entities,
+            project_root=root,
+            output_format="json",
+        )
+    payload = json.loads(report)
+    code_change = payload["outdated"][0]["code_changes"][0]
+    assert code_change["reason"] == "param type changed"
+    assert code_change["param_change"] == {
+        "name": "a",
+        "kind": "type",
+        "old": "int",
+        "new": "str",
+    }
+
+
+def test_report_outdated_param_default_reason_in_json() -> None:
+    import tempfile
+    from livedoc.core.graph import DocFragment
+    from livedoc.core.signatures import CodeEntity
+    from livedoc.report.reporter import report_outdated
+
+    with tempfile.TemporaryDirectory() as d:
+        root = Path(d)
+        cf = root / "m.py"
+        cf.write_text("x", encoding="utf-8")
+        f = DocFragment("api.md#limit", Path("api.md"), 5, ["m:limit"], "limit")
+        changes = {"m:limit": ("limit(n: int = 10) -> int", "limit(n: int = 20) -> int")}
+        entities = {
+            "m:limit": CodeEntity(
+                code_id="m:limit",
+                name="limit",
+                args=["n"],
+                return_annotation="int",
+                file_path=cf,
+                line=7,
+            )
+        }
+        report = report_outdated(
+            [f],
+            changes=changes,
+            entities_by_id=entities,
+            project_root=root,
+            output_format="json",
+        )
+    payload = json.loads(report)
+    code_change = payload["outdated"][0]["code_changes"][0]
+    assert code_change["reason"] == "param default changed"
+    assert code_change["param_change"] == {
+        "name": "n",
+        "kind": "default",
+        "old": "10",
+        "new": "20",
+    }
+
+
+def test_report_outdated_param_order_reason_in_json() -> None:
+    import tempfile
+    from livedoc.core.graph import DocFragment
+    from livedoc.core.signatures import CodeEntity
+    from livedoc.report.reporter import report_outdated
+
+    with tempfile.TemporaryDirectory() as d:
+        root = Path(d)
+        cf = root / "m.py"
+        cf.write_text("x", encoding="utf-8")
+        f = DocFragment("api.md#pair", Path("api.md"), 5, ["m:pair"], "pair")
+        changes = {"m:pair": ("pair(a: int, b: int) -> int", "pair(b: int, a: int) -> int")}
+        entities = {
+            "m:pair": CodeEntity(
+                code_id="m:pair",
+                name="pair",
+                args=["b", "a"],
+                return_annotation="int",
+                file_path=cf,
+                line=7,
+            )
+        }
+        report = report_outdated(
+            [f],
+            changes=changes,
+            entities_by_id=entities,
+            project_root=root,
+            output_format="json",
+        )
+    payload = json.loads(report)
+    code_change = payload["outdated"][0]["code_changes"][0]
+    assert code_change["reason"] == "param order changed"
+    assert code_change["param_change"] == {
+        "name": "*",
+        "kind": "order",
+        "old": ["a", "b"],
+        "new": ["b", "a"],
+    }
+
+
+def test_report_outdated_param_added_details_in_json() -> None:
+    import tempfile
+    from livedoc.core.graph import DocFragment
+    from livedoc.core.signatures import CodeEntity
+    from livedoc.report.reporter import report_outdated
+
+    with tempfile.TemporaryDirectory() as d:
+        root = Path(d)
+        cf = root / "m.py"
+        cf.write_text("x", encoding="utf-8")
+        f = DocFragment("api.md#add", Path("api.md"), 5, ["m:add"], "add")
+        changes = {"m:add": ("add(a: int) -> int", "add(a: int, b: int) -> int")}
+        entities = {
+            "m:add": CodeEntity(
+                code_id="m:add",
+                name="add",
+                args=["a", "b"],
+                return_annotation="int",
+                file_path=cf,
+                line=7,
+            )
+        }
+        report = report_outdated(
+            [f],
+            changes=changes,
+            entities_by_id=entities,
+            project_root=root,
+            output_format="json",
+        )
+    payload = json.loads(report)
+    code_change = payload["outdated"][0]["code_changes"][0]
+    assert code_change["reason"] == "params changed"
+    assert code_change["param_change"] == {
+        "name": "b",
+        "kind": "added",
+        "old": None,
+        "new": "b",
+    }
+
+
+def test_report_outdated_param_removed_details_in_json() -> None:
+    import tempfile
+    from livedoc.core.graph import DocFragment
+    from livedoc.core.signatures import CodeEntity
+    from livedoc.report.reporter import report_outdated
+
+    with tempfile.TemporaryDirectory() as d:
+        root = Path(d)
+        cf = root / "m.py"
+        cf.write_text("x", encoding="utf-8")
+        f = DocFragment("api.md#add", Path("api.md"), 5, ["m:add"], "add")
+        changes = {"m:add": ("add(a: int, b: int) -> int", "add(a: int) -> int")}
+        entities = {
+            "m:add": CodeEntity(
+                code_id="m:add",
+                name="add",
+                args=["a"],
+                return_annotation="int",
+                file_path=cf,
+                line=7,
+            )
+        }
+        report = report_outdated(
+            [f],
+            changes=changes,
+            entities_by_id=entities,
+            project_root=root,
+            output_format="json",
+        )
+    payload = json.loads(report)
+    code_change = payload["outdated"][0]["code_changes"][0]
+    assert code_change["reason"] == "params changed"
+    assert code_change["param_change"] == {
+        "name": "b",
+        "kind": "removed",
+        "old": "b",
+        "new": None,
+    }
+
+
 def test_report_unknown_anchors_json() -> None:
     from livedoc.core.graph import DocFragment
     from livedoc.report.reporter import report_outdated
@@ -372,6 +597,21 @@ def test_code_entity_format_signature() -> None:
     assert e.format_signature() == "add(a, b) -> int"
 
 
+def test_code_entity_format_signature_detailed() -> None:
+    from livedoc.core.signatures import CodeEntity
+
+    e = CodeEntity(
+        code_id="m:add",
+        name="add",
+        args=["a", "b"],
+        return_annotation="int",
+        file_path=Path("x.py"),
+        line=1,
+        signature_args=["a: int", "b: int = 1"],
+    )
+    assert e.format_signature(detailed=True) == "add(a: int, b: int = 1) -> int"
+
+
 def test_parse_doc_file_empty() -> None:
     import tempfile
     from livedoc.parsers.doc_parser import parse_doc_file
@@ -388,7 +628,6 @@ def test_parse_doc_file_empty() -> None:
 
 def test_parse_typescript_file() -> None:
     utils = EXAMPLES_ROOT / "ts_sample" / "utils.ts"
-    root = EXAMPLES_ROOT
     module_path = "ts_sample.utils"
     entities = parse_typescript_file(utils, module_path)
     code_ids = {e.code_id for e in entities}
@@ -466,6 +705,7 @@ def test_parse_go_edge_no_return_and_variadic() -> None:
         by_id = {e.code_id: e for e in entities}
         assert "edge:Log" in by_id
         assert by_id["edge:Log"].args == ["msg", "tags"]
+        assert by_id["edge:Log"].signature_args == ["msg: string", "tags: ...string"]
         assert by_id["edge:Log"].return_annotation == ""
         assert "edge:(*Logger).Close" in by_id
         assert by_id["edge:(*Logger).Close"].return_annotation == ""
@@ -596,6 +836,7 @@ def test_parse_typescript_edge_params() -> None:
         assert "edge:withArrow" in by_id
         assert by_id["edge:withDefaults"].args == ["a", "opts"]
         assert by_id["edge:withArrow"].args == ["name", "tags"]
+        assert by_id["edge:withDefaults"].signature_args == ["a: number = 1", "opts = { x: 1, y: 2 }"]
 
 
 def test_parse_typescript_edge_generics_and_callback_types() -> None:
@@ -700,3 +941,184 @@ def test_parse_doc_file_malformed_anchor() -> None:
         assert len(fragments) == 0
     finally:
         path.unlink()
+
+
+def test_parse_python_async_and_modern_parameter_kinds(tmp_path: Path) -> None:
+    source = tmp_path / "modern.py"
+    source.write_text(
+        (
+            "from typing import Any\n\n"
+            "async def fetch(user_id: int, /, verbose: bool = False, *, "
+            "timeout: float = 1.5, **options: Any) -> dict[str, Any]:\n"
+            "    return {}\n\n"
+            "class Client:\n"
+            "    async def request(self, path: str, /, *args: object, "
+            "retries: int = 3, **kwargs: object) -> bytes:\n"
+            "        return b''\n\n"
+            "    @classmethod\n"
+            "    def create(cls, *, base_url: str) -> 'Client':\n"
+            "        return cls()\n\n"
+            "    @staticmethod\n"
+            "    def normalize(value: str, *, lower: bool = True) -> str:\n"
+            "        return value\n"
+        ),
+        encoding="utf-8",
+    )
+
+    entities = {entity.code_id: entity for entity in parse_python_file(source, "modern")}
+
+    fetch = entities["modern:fetch"]
+    assert fetch.args == ["user_id", "/", "verbose", "*", "timeout", "**options"]
+    assert fetch.format_signature(detailed=True) == (
+        "fetch(user_id: int, /, verbose: bool = False, *, timeout: float = 1.5, "
+        "**options: Any) -> dict[str, Any]"
+    )
+
+    request = entities["modern:Client.request"]
+    assert request.args == ["path", "/", "*args", "retries", "**kwargs"]
+    assert request.format_signature(detailed=True) == (
+        "request(path: str, /, *args: object, retries: int = 3, "
+        "**kwargs: object) -> bytes"
+    )
+
+    create = entities["modern:Client.create"]
+    assert create.args == ["*", "base_url"]
+    assert create.format_signature(detailed=True) == (
+        "create(*, base_url: str) -> 'Client'"
+    )
+
+    normalize = entities["modern:Client.normalize"]
+    assert normalize.args == ["value", "*", "lower"]
+    assert normalize.format_signature(detailed=True) == (
+        "normalize(value: str, *, lower: bool = True) -> str"
+    )
+
+
+def test_python_parameter_kind_changes_affect_signature_hash(tmp_path: Path) -> None:
+    source = tmp_path / "kind_change.py"
+    source.write_text("def convert(value: str) -> str:\n    return value\n", encoding="utf-8")
+    normal = parse_python_file(source, "kind_change")[0]
+
+    source.write_text("def convert(value: str, /) -> str:\n    return value\n", encoding="utf-8")
+    positional_only = parse_python_file(source, "kind_change")[0]
+
+    assert normal.get_signature_hash() != positional_only.get_signature_hash()
+
+
+def test_parse_doc_file_supports_multiline_anchor(tmp_path: Path) -> None:
+    doc = tmp_path / "api.md"
+    doc.write_text(
+        (
+            "<!-- livedoc:\n"
+            "     code_id = \"service:fetch\",\n"
+            "               \"service:save\"\n"
+            "-->\n"
+            "## Service API\n\n"
+            "Documentation.\n"
+        ),
+        encoding="utf-8",
+    )
+
+    fragments = parse_doc_file(doc, tmp_path)
+
+    assert len(fragments) == 1
+    assert fragments[0].code_ids == ["service:fetch", "service:save"]
+    assert fragments[0].heading == "Service API"
+    assert fragments[0].doc_fragment_id == "api.md#service-api"
+    assert fragments[0].line_start == 1
+
+
+def test_parse_doc_file_makes_duplicate_heading_ids_unique(tmp_path: Path) -> None:
+    doc = tmp_path / "guide.md"
+    doc.write_text(
+        (
+            '<!-- livedoc: code_id = "module:first" -->\n'
+            "## Usage\n\n"
+            "First section.\n\n"
+            '<!-- livedoc: code_id = "module:second" -->\n'
+            "## Usage\n\n"
+            "Second section.\n"
+        ),
+        encoding="utf-8",
+    )
+
+    fragments = parse_doc_file(doc, tmp_path)
+
+    assert [fragment.doc_fragment_id for fragment in fragments] == [
+        "guide.md#usage",
+        "guide.md#usage-1",
+    ]
+    graph = DocGraph()
+    for fragment in fragments:
+        for code_id in fragment.code_ids:
+            graph.add_link(code_id, fragment)
+
+    outdated = graph.get_outdated_fragments({"module:first", "module:second"})
+    assert {fragment.doc_fragment_id for fragment in outdated} == {
+        "guide.md#usage",
+        "guide.md#usage-1",
+    }
+
+
+def test_parse_doc_file_slugifies_punctuation_and_unicode(tmp_path: Path) -> None:
+    doc = tmp_path / "guide.md"
+    doc.write_text(
+        '<!-- livedoc: code_id = "module:run" -->\n## API: Запуск / Run!\n',
+        encoding="utf-8",
+    )
+
+    fragments = parse_doc_file(doc, tmp_path)
+
+    assert fragments[0].doc_fragment_id == "guide.md#api-запуск-run"
+
+
+def test_typescript_class_parser_ignores_calls_and_control_flow(tmp_path: Path) -> None:
+    source = tmp_path / "service.ts"
+    source.write_text(
+        (
+            "export class Service {\n"
+            "  async run(value: number): Promise<void> {\n"
+            "    if (value > 0) {\n"
+            "      helper(value)\n"
+            "    }\n"
+            "    console.log(value)\n"
+            "  }\n\n"
+            "  private format(value: number): string {\n"
+            "    return String(value)\n"
+            "  }\n"
+            "}\n"
+        ),
+        encoding="utf-8",
+    )
+
+    entities = parse_typescript_file(source, "service")
+    code_ids = {entity.code_id for entity in entities}
+
+    assert "service:Service.run" in code_ids
+    assert "service:Service.format" in code_ids
+    assert "service:Service.if" not in code_ids
+    assert "service:Service.helper" not in code_ids
+    assert "service:Service.log" not in code_ids
+    assert len([entity for entity in entities if entity.code_id == "service:Service.run"]) == 1
+
+
+def test_typescript_overloads_return_one_entity(tmp_path: Path) -> None:
+    source = tmp_path / "formatter.ts"
+    source.write_text(
+        (
+            "export class Formatter {\n"
+            "  format(value: string): string;\n"
+            "  format(value: number): string;\n"
+            "  format(value: string | number): string {\n"
+            "    return String(value)\n"
+            "  }\n"
+            "}\n"
+        ),
+        encoding="utf-8",
+    )
+
+    entities = parse_typescript_file(source, "formatter")
+    matches = [entity for entity in entities if entity.code_id == "formatter:Formatter.format"]
+
+    assert len(matches) == 1
+    assert matches[0].signature_args == ["value: string | number"]

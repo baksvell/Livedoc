@@ -97,9 +97,9 @@ def test_main_e2e_detects_change_then_allows_update(
     assert len(payload["outdated"]) == 1
     code_change = payload["outdated"][0]["code_changes"][0]
     assert code_change["code_id"] == "web.service:render"
-    assert code_change["reason"] == "args changed"
+    assert code_change["reason"] == "params changed"
     assert code_change["code_file"] == "web/service.ts"
-    assert code_change["new_sig"] == "render(name, locale) -> string"
+    assert code_change["new_sig"] == "render(name: string, locale: string) -> string"
 
     rc_update = _run_main(monkeypatch, project_root, "--update", "--quiet")
     out_update = capsys.readouterr()
@@ -235,3 +235,94 @@ def test_main_e2e_ignore_code_ids_filters_existing_stored_baseline(
     assert payload["ok"] is True
     assert payload["outdated"] == []
     assert payload["unknown_anchors"] == []
+
+
+def test_main_version(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    from livedoc.cli import main
+
+    monkeypatch.setattr(sys, "argv", ["livedoc", "--version"])
+    with pytest.raises(SystemExit) as exc_info:
+        main()
+
+    assert exc_info.value.code == 0
+    assert capsys.readouterr().out.strip() == "livedoc 0.1.8"
+
+
+def test_main_reports_invalid_signature_baseline_without_traceback(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    (tmp_path / "module.py").write_text(
+        "def run() -> None:\n    pass\n",
+        encoding="utf-8",
+    )
+    docs = tmp_path / "docs"
+    docs.mkdir()
+    (docs / "api.md").write_text(
+        '<!-- livedoc: code_id = "module:run" -->\n## Run\n',
+        encoding="utf-8",
+    )
+    baseline = tmp_path / ".livedoc" / "code_signatures.json"
+    baseline.parent.mkdir()
+    baseline.write_text("{broken", encoding="utf-8")
+
+    rc = _run_main(monkeypatch, tmp_path)
+    captured = capsys.readouterr()
+
+    assert rc == 2
+    assert captured.out == ""
+    assert "LiveDoc error:" in captured.err
+    assert "invalid JSON" in captured.err
+    assert "Traceback" not in captured.err
+
+
+def test_main_reports_python_syntax_error_as_json(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    (tmp_path / "broken.py").write_text("def broken(:\n    pass\n", encoding="utf-8")
+    docs = tmp_path / "docs"
+    docs.mkdir()
+    (docs / "api.md").write_text("# API\n", encoding="utf-8")
+
+    rc = _run_main(monkeypatch, tmp_path, "--format", "json")
+    captured = capsys.readouterr()
+    payload = json.loads(captured.out)
+
+    assert rc == 2
+    assert captured.err == ""
+    assert payload["ok"] is False
+    assert "cannot parse Python file" in payload["error"]
+    assert "broken.py" in payload["error"]
+
+
+def test_main_rejects_duplicate_code_ids(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    (tmp_path / "service.ts").write_text(
+        "export function run(): void {}\n",
+        encoding="utf-8",
+    )
+    (tmp_path / "service.js").write_text(
+        "export function run() {}\n",
+        encoding="utf-8",
+    )
+    docs = tmp_path / "docs"
+    docs.mkdir()
+    (docs / "api.md").write_text("# API\n", encoding="utf-8")
+
+    rc = _run_main(monkeypatch, tmp_path)
+    captured = capsys.readouterr()
+
+    assert rc == 2
+    assert "duplicate code_id values detected" in captured.err
+    assert "service:run" in captured.err
+    assert "service.ts" in captured.err
+    assert "service.js" in captured.err

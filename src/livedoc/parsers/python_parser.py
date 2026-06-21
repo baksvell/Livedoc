@@ -1,4 +1,4 @@
-"""Python module parser: extract functions/methods with signatures and build code_id."""
+"""Python parser: extract functions and methods with stable signatures."""
 
 from __future__ import annotations
 
@@ -10,73 +10,162 @@ from livedoc.core.signatures import CodeEntity
 
 DEFAULT_IGNORE = ("tests", "test_*", "venv", ".venv", "__pycache__", ".git", "*.egg-info")
 
+FunctionNode = ast.FunctionDef | ast.AsyncFunctionDef
 
-def _qualified_name(module_path: str, node: ast.AST, class_name: str | None = None) -> str:
+
+def _qualified_name(module_path: str, node: FunctionNode, class_name: str | None = None) -> str:
     """Build code_id as module_path:name or module_path:Class.method."""
     if class_name:
-        return f"{module_path}:{class_name}.{getattr(node, 'name', '')}"
-    return f"{module_path}:{getattr(node, 'name', '')}"
+        return f"{module_path}:{class_name}.{node.name}"
+    return f"{module_path}:{node.name}"
 
 
-def _get_args(node: ast.FunctionDef) -> list[str]:
-    """Extract argument names from ast.FunctionDef (including *args, **kwargs)."""
-    args: list[str] = []
-    for a in node.args.args:
-        if a.arg == "self":
-            continue
-        args.append(a.arg)
-    if node.args.vararg:
-        args.append(f"*{node.args.vararg.arg}")
-    if node.args.kwarg:
-        args.append(f"**{node.args.kwarg.arg}")
-    return args
+def _is_static_method(node: FunctionNode) -> bool:
+    """Return whether a function is decorated with ``@staticmethod``."""
+    for decorator in node.decorator_list:
+        if isinstance(decorator, ast.Name) and decorator.id == "staticmethod":
+            return True
+        if isinstance(decorator, ast.Attribute) and decorator.attr == "staticmethod":
+            return True
+    return False
 
 
-def _return_annotation(node: ast.FunctionDef) -> str:
-    """String representation of return annotation."""
-    if node.returns is None:
+def _format_annotation(annotation: ast.expr | None) -> str:
+    """Return a source-like representation of a type annotation."""
+    if annotation is None:
         return ""
-    return ast.unparse(node.returns) if hasattr(ast, "unparse") else ""
+    return ast.unparse(annotation)
+
+
+def _format_default(default: ast.expr | None) -> str:
+    """Return a source-like representation of a default value."""
+    if default is None:
+        return ""
+    return ast.unparse(default)
+
+
+def _format_arg(arg: ast.arg, default: ast.expr | None = None, *, detailed: bool) -> str:
+    """Format one argument, optionally preserving its annotation and default."""
+    value = arg.arg
+    if detailed and arg.annotation is not None:
+        value = f"{value}: {_format_annotation(arg.annotation)}"
+    if detailed and default is not None:
+        value = f"{value} = {_format_default(default)}"
+    return value
+
+
+def _signature_parts(
+    node: FunctionNode,
+    *,
+    detailed: bool,
+    skip_implicit_first: bool,
+) -> list[str]:
+    """Build Python signature parts, including ``/`` and ``*`` separators."""
+    parts: list[str] = []
+
+    positional = [*node.args.posonlyargs, *node.args.args]
+    positional_defaults: list[ast.expr | None] = [None] * (
+        len(positional) - len(node.args.defaults)
+    ) + list(node.args.defaults)
+
+    skip_first = (
+        skip_implicit_first
+        and bool(positional)
+        and positional[0].arg in {"self", "cls"}
+        and not _is_static_method(node)
+    )
+    if skip_first:
+        positional = positional[1:]
+        positional_defaults = positional_defaults[1:]
+
+    original_posonly_count = len(node.args.posonlyargs)
+    remaining_posonly_count = max(0, original_posonly_count - int(skip_first))
+
+    for index, (arg, default) in enumerate(zip(positional, positional_defaults, strict=True)):
+        parts.append(_format_arg(arg, default, detailed=detailed))
+        if remaining_posonly_count and index + 1 == remaining_posonly_count:
+            parts.append("/")
+
+    if node.args.vararg is not None:
+        vararg = _format_arg(node.args.vararg, detailed=detailed)
+        parts.append(f"*{vararg}")
+    elif node.args.kwonlyargs:
+        parts.append("*")
+
+    for arg, default in zip(node.args.kwonlyargs, node.args.kw_defaults, strict=True):
+        parts.append(_format_arg(arg, default, detailed=detailed))
+
+    if node.args.kwarg is not None:
+        kwarg = _format_arg(node.args.kwarg, detailed=detailed)
+        parts.append(f"**{kwarg}")
+
+    return parts
+
+
+def _get_args(node: FunctionNode, *, skip_implicit_first: bool = False) -> list[str]:
+    """Extract argument names while preserving Python parameter kinds."""
+    return _signature_parts(
+        node,
+        detailed=False,
+        skip_implicit_first=skip_implicit_first,
+    )
+
+
+def _get_signature_args(
+    node: FunctionNode,
+    *,
+    skip_implicit_first: bool = False,
+) -> list[str]:
+    """Extract arguments with type/default details for stable hashing."""
+    return _signature_parts(
+        node,
+        detailed=True,
+        skip_implicit_first=skip_implicit_first,
+    )
+
+
+def _return_annotation(node: FunctionNode) -> str:
+    """Return a source-like representation of the return annotation."""
+    return _format_annotation(node.returns)
+
+
+def _build_entity(
+    node: FunctionNode,
+    file_path: Path,
+    module_path: str,
+    class_name: str | None = None,
+) -> CodeEntity:
+    """Create a ``CodeEntity`` from a Python function or method node."""
+    is_method = class_name is not None
+    return CodeEntity(
+        code_id=_qualified_name(module_path, node, class_name),
+        name=node.name,
+        args=_get_args(node, skip_implicit_first=is_method),
+        return_annotation=_return_annotation(node),
+        file_path=file_path,
+        line=node.lineno,
+        signature_args=_get_signature_args(node, skip_implicit_first=is_method),
+    )
 
 
 def parse_python_file(file_path: Path, module_path: str) -> list[CodeEntity]:
-    """Parse one .py file and return entities (functions and methods)."""
+    """Parse one ``.py`` file and return top-level functions and class methods."""
     entities: list[CodeEntity] = []
     source = file_path.read_text(encoding="utf-8")
-    tree = ast.parse(source)
+    tree = ast.parse(source, filename=str(file_path))
 
     for node in tree.body:
-        if isinstance(node, ast.FunctionDef):
-            code_id = _qualified_name(module_path, node)
-            entities.append(
-                CodeEntity(
-                    code_id=code_id,
-                    name=node.name,
-                    args=_get_args(node),
-                    return_annotation=_return_annotation(node),
-                    file_path=file_path,
-                    line=node.lineno,
-                )
-            )
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            entities.append(_build_entity(node, file_path, module_path))
         elif isinstance(node, ast.ClassDef):
             for child in node.body:
-                if isinstance(child, ast.FunctionDef):
-                    code_id = _qualified_name(module_path, child, node.name)
-                    entities.append(
-                        CodeEntity(
-                            code_id=code_id,
-                            name=child.name,
-                            args=_get_args(child),
-                            return_annotation=_return_annotation(child),
-                            file_path=file_path,
-                            line=child.lineno,
-                        )
-                    )
+                if isinstance(child, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                    entities.append(_build_entity(child, file_path, module_path, node.name))
     return entities
 
 
 def _path_to_module(root: Path, file_path: Path) -> str:
-    """File path relative to root -> dotted module name."""
+    """Convert a file path relative to root into a dotted module name."""
     rel = file_path.relative_to(root)
     parts = list(rel.parts)
     if parts[-1] == "__init__.py":
@@ -87,7 +176,7 @@ def _path_to_module(root: Path, file_path: Path) -> str:
 
 
 def _is_ignored(rel_path: Path, ignore_patterns: tuple[str, ...]) -> bool:
-    """Return True if path matches any ignore pattern (segment or glob)."""
+    """Return True if a path matches an ignored segment or glob."""
     parts = rel_path.parts
     for pattern in ignore_patterns:
         for part in parts:
@@ -101,10 +190,7 @@ def parse_python_module(
     package_path: Path,
     ignore_patterns: tuple[str, ...] = DEFAULT_IGNORE,
 ) -> list[CodeEntity]:
-    """
-    Recursively parse Python package/module and return all entities.
-    ignore_patterns: path segments or globs to exclude (tests, venv, ...).
-    """
+    """Recursively parse a Python package/module and return all entities."""
     all_entities: list[CodeEntity] = []
     if package_path.is_file() and package_path.suffix == ".py":
         if _is_ignored(package_path.relative_to(root), ignore_patterns):
@@ -112,6 +198,7 @@ def parse_python_module(
         module_path = _path_to_module(root, package_path)
         all_entities.extend(parse_python_file(package_path, module_path))
         return all_entities
+
     for path in package_path.rglob("*.py"):
         if path.name.startswith("_"):
             continue
@@ -127,5 +214,5 @@ def parse_python_module(
 
 
 def build_current_signatures(entities: list[CodeEntity]) -> dict[str, str]:
-    """Build code_id -> signature_hash map from entities for comparison."""
-    return {e.code_id: e.get_signature_hash() for e in entities}
+    """Build a ``code_id -> signature_hash`` map from parsed entities."""
+    return {entity.code_id: entity.get_signature_hash() for entity in entities}

@@ -33,6 +33,84 @@ def _parse_signature(sig: str) -> tuple[str, list[str], str] | None:
     return name, args, ret
 
 
+def _parse_param(param: str) -> tuple[str, str, str]:
+    """Parse param into (name, type, default) from 'name: type = default'."""
+    raw = param.strip()
+    default_expr = ""
+    if "=" in raw:
+        before_default, after_default = raw.split("=", 1)
+        raw = before_default.strip()
+        default_expr = after_default.strip()
+    type_expr = ""
+    name = raw.strip()
+    if ":" in raw:
+        before_type, after_type = raw.split(":", 1)
+        name = before_type.strip()
+        type_expr = after_type.strip()
+    return name, type_expr, default_expr
+
+
+def _param_change_info(old_args: list[str], new_args: list[str]) -> tuple[str, dict | None]:
+    """Return (reason, machine-readable param_change) for parameter changes."""
+    if old_args == new_args:
+        return "", None
+    old_names = [_parse_param(arg)[0] for arg in old_args]
+    new_names = [_parse_param(arg)[0] for arg in new_args]
+    if old_names != new_names:
+        if sorted(old_names) == sorted(new_names):
+            return "param order changed", {
+                "name": "*",
+                "kind": "order",
+                "old": old_names,
+                "new": new_names,
+            }
+        removed = [name for name in old_names if name not in new_names]
+        added = [name for name in new_names if name not in old_names]
+        if removed:
+            name = removed[0]
+            return "params changed", {
+                "name": name,
+                "kind": "removed",
+                "old": name,
+                "new": None,
+            }
+        if added:
+            name = added[0]
+            return "params changed", {
+                "name": name,
+                "kind": "added",
+                "old": None,
+                "new": name,
+            }
+        return "params changed", {
+            "name": "*",
+            "kind": "changed",
+            "old": old_names,
+            "new": new_names,
+        }
+
+    old_by_name = {name: (typ, default) for name, typ, default in (_parse_param(arg) for arg in old_args)}
+    new_by_name = {name: (typ, default) for name, typ, default in (_parse_param(arg) for arg in new_args)}
+    for name in old_names:
+        old_type, old_default = old_by_name.get(name, ("", ""))
+        new_type, new_default = new_by_name.get(name, ("", ""))
+        if old_type != new_type:
+            return "param type changed", {
+                "name": name,
+                "kind": "type",
+                "old": old_type,
+                "new": new_type,
+            }
+        if old_default != new_default:
+            return "param default changed", {
+                "name": name,
+                "kind": "default",
+                "old": old_default,
+                "new": new_default,
+            }
+    return "args changed", None
+
+
 def _change_reason(old_sig: str | None, new_sig: str | None) -> str:
     """Return a short human-readable reason for the detected signature change."""
     if old_sig is None and new_sig:
@@ -49,16 +127,31 @@ def _change_reason(old_sig: str | None, new_sig: str | None) -> str:
 
     _, old_args, old_ret = old_parts
     _, new_args, new_ret = new_parts
-    args_changed = old_args != new_args
+    param_reason, _ = _param_change_info(old_args, new_args)
+    args_changed = bool(param_reason)
     ret_changed = old_ret != new_ret
 
     if args_changed and ret_changed:
-        return "args and return type changed"
+        return f"{param_reason} and return type changed"
     if args_changed:
-        return "args changed"
+        return param_reason
     if ret_changed:
         return "return type changed"
     return "signature changed"
+
+
+def _param_change(old_sig: str | None, new_sig: str | None) -> dict | None:
+    """Return machine-readable details about parameter-level changes."""
+    if not old_sig or not new_sig:
+        return None
+    old_parts = _parse_signature(old_sig)
+    new_parts = _parse_signature(new_sig)
+    if not old_parts or not new_parts:
+        return None
+    _, old_args, _ = old_parts
+    _, new_args, _ = new_parts
+    _, details = _param_change_info(old_args, new_args)
+    return details
 
 
 def _code_location(
@@ -92,6 +185,7 @@ def _code_change_entry(
         "old_sig": old_sig,
         "new_sig": new_sig,
         "reason": _change_reason(old_sig, new_sig),
+        "param_change": _param_change(old_sig, new_sig),
         "diff": _format_change(old_sig, new_sig),
         "code_file": code_file,
         "code_line": code_line,

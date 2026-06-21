@@ -70,9 +70,10 @@ def _return_before(source: str, start: int, stop_char: str) -> str:
     return source[start:end].strip()
 
 
-def _extract_go_params(params_str: str) -> list[str]:
-    """Extract param names from Go params: 'a, b int' or 'ctx context.Context'."""
+def _extract_go_params(params_str: str) -> tuple[list[str], list[str]]:
+    """Extract param names and detailed signature params from Go params."""
     args: list[str] = []
+    signature_args: list[str] = []
     # Split by comma at top level (Go allows "a, b int" - names share type)
     parts = _split_go_top_level_commas(params_str.strip())
     pending_names: list[str] = []
@@ -86,10 +87,14 @@ def _extract_go_params(params_str: str) -> list[str]:
         tokens = part.split()
         if len(tokens) >= 2:
             name = tokens[0]
+            type_expr = " ".join(tokens[1:])
             if re.fullmatch(r"[A-Za-z_]\w*", name) and name != "_":
-                args.extend(pending_names)
+                for pending in pending_names:
+                    args.append(pending)
+                    signature_args.append(f"{pending}: {type_expr}")
                 pending_names = []
                 args.append(name)
+                signature_args.append(f"{name}: {type_expr}")
             else:
                 pending_names = []
             continue
@@ -100,7 +105,7 @@ def _extract_go_params(params_str: str) -> list[str]:
             pending_names.append(token)
         else:
             pending_names = []
-    return args
+    return args, signature_args
 
 
 def parse_go_file(file_path: Path, pkg: str) -> list[CodeEntity]:
@@ -121,7 +126,7 @@ def parse_go_file(file_path: Path, pkg: str) -> list[CodeEntity]:
             continue
         type_name = recv[-1]
         qualified = f"(*{type_name[1:]}).{method_name}" if type_name.startswith("*") else f"{type_name}.{method_name}"
-        args = _extract_go_params(params_str)
+        args, signature_args = _extract_go_params(params_str)
         line = source[: m.start()].count("\n") + 1
         entities.append(
             CodeEntity(
@@ -131,6 +136,7 @@ def parse_go_file(file_path: Path, pkg: str) -> list[CodeEntity]:
                 return_annotation=ret,
                 file_path=file_path,
                 line=line,
+                signature_args=signature_args,
             )
         )
     # Functions (methods are excluded by requiring "func Name(" pattern)
@@ -143,7 +149,7 @@ def parse_go_file(file_path: Path, pkg: str) -> list[CodeEntity]:
             continue
         params_str = source[open_idx + 1 : close_idx].strip()
         ret = _return_before(source, close_idx + 1, "{")
-        args = _extract_go_params(params_str)
+        args, signature_args = _extract_go_params(params_str)
         line = source[: m.start()].count("\n") + 1
         entities.append(
             CodeEntity(
@@ -153,6 +159,7 @@ def parse_go_file(file_path: Path, pkg: str) -> list[CodeEntity]:
                 return_annotation=ret,
                 file_path=file_path,
                 line=line,
+                signature_args=signature_args,
             )
         )
     return entities

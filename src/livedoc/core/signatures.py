@@ -14,7 +14,7 @@ from pathlib import Path
 def signature_hash(name: str, args: list[str], return_annotation: str = "") -> str:
     """Build stable hash from name and signature (args + return)."""
     payload = json.dumps(
-        {"name": name, "args": sorted(args), "return": return_annotation},
+        {"name": name, "args": args, "return": return_annotation},
         sort_keys=True,
     )
     return hashlib.sha256(payload.encode()).hexdigest()
@@ -30,13 +30,16 @@ class CodeEntity:
     return_annotation: str
     file_path: Path
     line: int
+    signature_args: list[str] | None = None
 
     def get_signature_hash(self) -> str:
-        return signature_hash(self.name, self.args, self.return_annotation)
+        args_for_hash = self.signature_args if self.signature_args is not None else self.args
+        return signature_hash(self.name, args_for_hash, self.return_annotation)
 
-    def format_signature(self) -> str:
+    def format_signature(self, detailed: bool = False) -> str:
         """Human-readable signature: add(a, b) -> int."""
-        args_str = ", ".join(self.args)
+        args = self.signature_args if detailed and self.signature_args is not None else self.args
+        args_str = ", ".join(args)
         ret = f" -> {self.return_annotation}" if self.return_annotation else ""
         return f"{self.name}({args_str}){ret}"
 
@@ -89,13 +92,28 @@ class CodeSignatures:
         if not path.exists():
             return None
         data = json.loads(path.read_text(encoding="utf-8"))
+        if not isinstance(data, dict):
+            raise ValueError("signature baseline must be a JSON object")
+
         sigs: dict[str, str] = {}
         readable: dict[str, str] = {}
         for code_id, val in data.items():
+            if not isinstance(code_id, str) or not code_id:
+                raise ValueError("signature baseline contains an invalid code_id")
             if isinstance(val, str):
                 sigs[code_id] = val
-            elif isinstance(val, dict):
-                sigs[code_id] = val.get("hash") or val.get("h") or ""
-                if "sig" in val or "s" in val:
-                    readable[code_id] = val.get("sig") or val.get("s") or ""
+                continue
+            if not isinstance(val, dict):
+                raise ValueError(f"invalid signature entry for {code_id!r}")
+
+            signature = val.get("hash") or val.get("h")
+            if not isinstance(signature, str) or not signature:
+                raise ValueError(f"missing signature hash for {code_id!r}")
+            sigs[code_id] = signature
+
+            readable_signature = val.get("sig") or val.get("s")
+            if readable_signature is not None:
+                if not isinstance(readable_signature, str):
+                    raise ValueError(f"invalid readable signature for {code_id!r}")
+                readable[code_id] = readable_signature
         return cls(signatures=sigs, readable=readable)

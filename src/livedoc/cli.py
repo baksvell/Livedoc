@@ -17,6 +17,7 @@ from livedoc.core.discovery import (
     is_ignored_code_id,
 )
 from livedoc.core.graph import DocFragment, DocGraph, find_unknown_anchor_refs
+from livedoc.core.initializer import initialize_project
 from livedoc.core.signatures import CodeSignatures
 from livedoc.parsers.doc_parser import parse_doc_anchors
 from livedoc.parsers.python_parser import build_current_signatures
@@ -113,6 +114,42 @@ def _relative_source_location(entity_path: Path, project_root: Path) -> str:
         return entity_path.resolve().relative_to(project_root.resolve()).as_posix()
     except ValueError:
         return entity_path.resolve().as_posix()
+
+
+def run_init(
+    project_root: Path,
+    docs_dir: str = DEFAULT_DOCS_DIR,
+    force: bool = False,
+) -> int:
+    """Initialize LiveDoc configuration and starter documentation."""
+    root = project_root.resolve()
+    if not root.exists():
+        return _emit_error(f"project path not found: {root}", "text")
+    if not root.is_dir():
+        return _emit_error(f"project path is not a directory: {root}", "text")
+
+    try:
+        result = initialize_project(root, docs_dir=docs_dir, force=force)
+    except (OSError, UnicodeError, ValueError) as exc:
+        return _emit_error(_exception_message(exc, "initialization"), "text")
+
+    print(f"LiveDoc initialized in {root}")
+    if result.created:
+        print("Created:")
+        for path in result.created:
+            print(f"  {path}")
+    if result.overwritten:
+        print("Overwritten:")
+        for path in result.overwritten:
+            print(f"  {path}")
+    if result.skipped:
+        print("Skipped existing files:")
+        for path in result.skipped:
+            print(f"  {path}")
+    print("Next steps:")
+    print("  livedoc symbols .")
+    print(f"  livedoc . --docs {result.docs_dir}")
+    return 0
 
 
 def run_symbols(
@@ -321,6 +358,37 @@ def _resolve_discovery_options(
     return root, ignore, ignore_code_ids, output_format
 
 
+def _build_init_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(
+        prog="livedoc init",
+        description="Initialize LiveDoc configuration and starter documentation",
+    )
+    parser.add_argument(
+        "path",
+        nargs="?",
+        default=".",
+        type=Path,
+        help="Project root (default: current directory)",
+    )
+    parser.add_argument(
+        "--docs",
+        default=DEFAULT_DOCS_DIR,
+        metavar="DIR",
+        help=f"Documentation directory to create (default: {DEFAULT_DOCS_DIR})",
+    )
+    parser.add_argument(
+        "--force",
+        action="store_true",
+        help="Overwrite existing LiveDoc config and starter README",
+    )
+    return parser
+
+
+def _run_init_command(argv: list[str]) -> int:
+    args = _build_init_parser().parse_args(argv)
+    return run_init(args.path, docs_dir=args.docs, force=args.force)
+
+
 def _build_symbols_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="livedoc symbols",
@@ -343,9 +411,11 @@ def _build_check_parser() -> argparse.ArgumentParser:
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=(
             "commands:\n"
+            "  init [path]     Initialize config and starter documentation\n"
             "  symbols [path]  List discovered symbols and reusable code_id values\n"
             "\n"
             "examples:\n"
+            "  livedoc init .\n"
             "  livedoc . --docs docs\n"
             "  livedoc symbols .\n"
             "  livedoc symbols . --format json"
@@ -385,6 +455,8 @@ def _run_check_command(argv: list[str]) -> int:
 
 def main() -> int:
     argv = sys.argv[1:]
+    if argv and argv[0] == "init":
+        return _run_init_command(argv[1:])
     if argv and argv[0] == "symbols":
         return _run_symbols_command(argv[1:])
     return _run_check_command(argv)

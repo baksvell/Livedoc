@@ -3,29 +3,28 @@
 from __future__ import annotations
 
 import argparse
-import fnmatch
 import json
 import sys
 from pathlib import Path
 
 from livedoc import __version__
 from livedoc.config import load_config
-from livedoc.core.graph import DocGraph, find_unknown_anchor_refs
-from livedoc.core.graph import DocFragment
-from livedoc.core.signatures import CodeEntity, CodeSignatures
-from livedoc.parsers.doc_parser import parse_doc_anchors
-from livedoc.parsers.python_parser import (
-    build_current_signatures,
-    parse_python_module,
+from livedoc.core.discovery import (
+    discover_code_entities,
+    filter_code_entities,
+    find_duplicate_code_ids,
+    format_duplicate_code_ids,
+    is_ignored_code_id,
 )
-from livedoc.parsers.typescript_parser import parse_typescript_module
-from livedoc.parsers.go_parser import parse_go_module
+from livedoc.core.graph import DocFragment, DocGraph, find_unknown_anchor_refs
+from livedoc.core.signatures import CodeSignatures
+from livedoc.parsers.doc_parser import parse_doc_anchors
+from livedoc.parsers.python_parser import build_current_signatures
 from livedoc.report.reporter import report_outdated
 
 
 DEFAULT_DOCS_DIR = "docs"
 SIGNATURES_FILE = ".livedoc/code_signatures.json"
-LIVEDOCIGNORE_FILE = ".livedocignore"
 
 
 def _emit_error(message: str, output_format: str) -> int:
@@ -60,47 +59,6 @@ def _exception_message(exc: Exception, context: str) -> str:
     return f"{context}: {exc}"
 
 
-def _duplicate_code_ids(entities: list[CodeEntity]) -> dict[str, list[CodeEntity]]:
-    """Return code IDs that resolve to more than one code entity."""
-    grouped: dict[str, list[CodeEntity]] = {}
-    for entity in entities:
-        grouped.setdefault(entity.code_id, []).append(entity)
-    return {code_id: matches for code_id, matches in grouped.items() if len(matches) > 1}
-
-
-def _format_duplicate_code_ids(duplicates: dict[str, list[CodeEntity]], root: Path) -> str:
-    """Format duplicate code IDs with their source locations."""
-    details: list[str] = []
-    for code_id in sorted(duplicates):
-        locations: list[str] = []
-        for entity in duplicates[code_id]:
-            try:
-                path = entity.file_path.resolve().relative_to(root.resolve())
-            except ValueError:
-                path = entity.file_path
-            locations.append(f"{path.as_posix()}:{entity.line}")
-        details.append(f"{code_id} ({', '.join(locations)})")
-    return "duplicate code_id values detected: " + "; ".join(details)
-
-
-def _load_livedocignore(root: Path) -> tuple[str, ...]:
-    """Load patterns from .livedocignore (one per line, # comments ignored)."""
-    path = root / LIVEDOCIGNORE_FILE
-    if not path.exists():
-        return ()
-    patterns: list[str] = []
-    for line in path.read_text(encoding="utf-8").splitlines():
-        line = line.strip()
-        if line and not line.startswith("#"):
-            patterns.append(line)
-    return tuple(patterns)
-
-
-def _is_ignored_code_id(code_id: str, ignore_code_ids: tuple[str, ...]) -> bool:
-    """Return True if code_id matches any configured ignore pattern."""
-    return any(fnmatch.fnmatch(code_id, pattern) for pattern in ignore_code_ids)
-
-
 def _filter_doc_fragments(
     fragments: list[DocFragment],
     ignore_code_ids: tuple[str, ...],
@@ -113,7 +71,7 @@ def _filter_doc_fragments(
         code_ids = [
             code_id
             for code_id in fragment.code_ids
-            if not _is_ignored_code_id(code_id, ignore_code_ids)
+            if not is_ignored_code_id(code_id, ignore_code_ids)
         ]
         if code_ids:
             filtered.append(
@@ -139,12 +97,12 @@ def _filter_stored_signatures(
         signatures={
             code_id: sig
             for code_id, sig in stored.signatures.items()
-            if not _is_ignored_code_id(code_id, ignore_code_ids)
+            if not is_ignored_code_id(code_id, ignore_code_ids)
         },
         readable={
             code_id: sig
             for code_id, sig in stored.readable.items()
-            if not _is_ignored_code_id(code_id, ignore_code_ids)
+            if not is_ignored_code_id(code_id, ignore_code_ids)
         },
     )
 
@@ -163,36 +121,22 @@ def run_check(
     Returns 1 if outdated or unknown anchors, 0 if up to date, 2 on error.
     """
     root = project_root.resolve()
-    code_path = root
     docs_path = root / docs_dir
     if not docs_path.exists():
         return _emit_error(f"documentation folder not found: {docs_path}", output_format)
 
     # Parse code (Python + TypeScript/JavaScript + Go)
-    from livedoc.parsers.python_parser import DEFAULT_IGNORE
-
-    ignore = list(DEFAULT_IGNORE)
-    ignore.extend(_load_livedocignore(root))
-    if ignore_patterns:
-        ignore.extend(ignore_patterns)
-    ignore_tuple = tuple(ignore)
     try:
-        entities = parse_python_module(root, code_path, ignore_patterns=ignore_tuple)
-        entities.extend(parse_typescript_module(root, code_path, ignore_tuple))
-        entities.extend(parse_go_module(root, code_path, ignore_tuple))
+        entities = discover_code_entities(root, ignore_patterns)
     except (OSError, UnicodeError, SyntaxError) as exc:
         return _emit_error(_exception_message(exc, "source code"), output_format)
 
-    duplicates = _duplicate_code_ids(entities)
+    duplicates = find_duplicate_code_ids(entities)
     if duplicates:
-        return _emit_error(_format_duplicate_code_ids(duplicates, root), output_format)
+        message = format_duplicate_code_ids(duplicates, root)
+        return _emit_error(message, output_format)
 
-    if ignore_code_ids:
-        entities = [
-            entity
-            for entity in entities
-            if not _is_ignored_code_id(entity.code_id, ignore_code_ids)
-        ]
+    entities = filter_code_entities(entities, ignore_code_ids)
     current_sigs = build_current_signatures(entities)
     entities_by_id = {e.code_id: e for e in entities}
     current_readable = {e.code_id: e.format_signature(detailed=True) for e in entities}

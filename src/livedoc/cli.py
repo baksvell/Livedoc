@@ -340,6 +340,16 @@ def _build_check_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="livedoc",
         description="Living Documentation: check doc freshness",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog=(
+            "commands:\n"
+            "  symbols [path]  List discovered symbols and reusable code_id values\n"
+            "\n"
+            "examples:\n"
+            "  livedoc . --docs docs\n"
+            "  livedoc symbols .\n"
+            "  livedoc symbols . --format json"
+        ),
     )
     parser.add_argument(
         "--version",

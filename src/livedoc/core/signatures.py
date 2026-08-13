@@ -62,6 +62,7 @@ CodeChangeKind = Literal[
     "symbol_added",
     "symbol_removed",
     "signature_changed",
+    "return_type_changed",
 ]
 
 
@@ -113,6 +114,21 @@ class CodeSignatures:
                 kind = "symbol_removed"
             else:
                 kind = "signature_changed"
+                old_signature = self.get_readable(code_id)
+                new_signature = current_readable.get(code_id)
+
+                if old_signature and new_signature:
+                    old_parts = parse_readable_signature(old_signature)
+                    new_parts = parse_readable_signature(new_signature)
+                    if old_parts and new_parts:
+                        old_name, old_args, old_return = old_parts
+                        new_name, new_args, new_return = new_parts
+                        if (
+                            old_name == new_name
+                            and old_args == new_args
+                            and old_return != new_return
+                        ):
+                            kind = "return_type_changed"
 
             changes.append(
                 CodeChange(

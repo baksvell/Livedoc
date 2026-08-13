@@ -2,6 +2,18 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.2.1] - 2026-08-13
+
+### Fixed
+
+* Documentation fragments linked to multiple `code_id` values now report only symbols that actually changed
+
+### Changed
+
+* Introduced structured `CodeChange` objects for internal change representation
+* Reporter now consumes structured code changes directly instead of signature tuples
+* Ruff lint rules are now selected explicitly to keep CI behavior stable across Ruff releases
+
 ## [0.2.0] - 2026-06-21
 
 ### Added

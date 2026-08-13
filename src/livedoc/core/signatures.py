@@ -9,6 +9,7 @@ import hashlib
 import json
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Literal
 
 
 def signature_hash(name: str, args: list[str], return_annotation: str = "") -> str:
@@ -44,6 +45,13 @@ class CodeEntity:
         return f"{self.name}({args_str}){ret}"
 
 
+CodeChangeKind = Literal[
+    "symbol_added",
+    "symbol_removed",
+    "signature_changed",
+]
+
+
 @dataclass(frozen=True)
 class CodeChange:
     """A detected change to one code symbol."""
@@ -51,6 +59,7 @@ class CodeChange:
     code_id: str
     old_signature: str | None
     new_signature: str | None
+    kind: CodeChangeKind
 
 
 @dataclass
@@ -82,14 +91,25 @@ class CodeSignatures:
         current_readable: dict[str, str],
     ) -> list[CodeChange]:
         """Build structured details for added, changed, or removed code symbols."""
-        return [
-            CodeChange(
-                code_id=code_id,
-                old_signature=self.get_readable(code_id),
-                new_signature=current_readable.get(code_id),
+        changes: list[CodeChange] = []
+        for code_id in sorted(self.changed_code_ids(current)):
+            kind: CodeChangeKind
+            if code_id not in self.signatures:
+                kind = "symbol_added"
+            elif code_id not in current:
+                kind = "symbol_removed"
+            else:
+                kind = "signature_changed"
+
+            changes.append(
+                CodeChange(
+                    code_id=code_id,
+                    old_signature=self.get_readable(code_id),
+                    new_signature=current_readable.get(code_id),
+                    kind=kind,
+                )
             )
-            for code_id in sorted(self.changed_code_ids(current))
-        ]
+        return changes
 
     def update(self, current: dict[str, str], readable: dict[str, str] | None = None) -> None:
         """Update stored signatures to current state."""

@@ -110,6 +110,53 @@ def test_code_signatures_removed() -> None:
     assert changed == {"m:add"}
 
 
+def test_code_signatures_builds_added_change_details() -> None:
+    stored = CodeSignatures({})
+
+    changes = stored.build_changes(
+        {"m:add": "hash-new"},
+        {"m:add": "add(a: int) -> int"},
+    )
+
+    assert len(changes) == 1
+    change = changes[0]
+    assert change.code_id == "m:add"
+    assert change.old_signature is None
+    assert change.new_signature == "add(a: int) -> int"
+
+
+def test_code_signatures_builds_removed_change_details() -> None:
+    stored = CodeSignatures(
+        {"m:add": "hash-old"},
+        readable={"m:add": "add(a: int) -> int"},
+    )
+
+    changes = stored.build_changes({}, {})
+
+    assert len(changes) == 1
+    change = changes[0]
+    assert change.code_id == "m:add"
+    assert change.old_signature == "add(a: int) -> int"
+    assert change.new_signature is None
+
+
+def test_code_signatures_builds_change_details() -> None:
+    stored = CodeSignatures(
+        {"m:add": "hash-old"},
+        readable={"m:add": "add(a: int) -> int"},
+    )
+    current = {"m:add": "hash-new"}
+    current_readable = {"m:add": "add(a: int, b: int) -> int"}
+
+    changes = stored.build_changes(current, current_readable)
+
+    assert len(changes) == 1
+    change = changes[0]
+    assert change.code_id == "m:add"
+    assert change.old_signature == "add(a: int) -> int"
+    assert change.new_signature == "add(a: int, b: int) -> int"
+
+
 def test_parse_python_module_ignores_tests() -> None:
     """Default ignore excludes tests/ and similar paths."""
     from livedoc.parsers.python_parser import DEFAULT_IGNORE, parse_python_module

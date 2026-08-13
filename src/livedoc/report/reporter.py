@@ -7,14 +7,18 @@ import re
 from pathlib import Path
 
 from livedoc.core.graph import DocFragment
-from livedoc.core.signatures import CodeChange, CodeEntity
+from livedoc.core.signatures import CodeChange, CodeChangeKind, CodeEntity
 
 
-def _format_change(old_sig: str | None, new_sig: str | None) -> str:
+def _format_change(
+    kind: CodeChangeKind,
+    old_sig: str | None,
+    new_sig: str | None,
+) -> str:
     """Format signature diff for report."""
-    if old_sig is None and new_sig:
+    if kind == "symbol_added" and new_sig:
         return f"Added: {new_sig}"
-    if old_sig and new_sig is None:
+    if kind == "symbol_removed" and old_sig:
         return f"Removed: {old_sig}"
     if old_sig and new_sig:
         return f"{old_sig}  ->  {new_sig}"
@@ -111,11 +115,15 @@ def _param_change_info(old_args: list[str], new_args: list[str]) -> tuple[str, d
     return "args changed", None
 
 
-def _change_reason(old_sig: str | None, new_sig: str | None) -> str:
+def _change_reason(
+    kind: CodeChangeKind,
+    old_sig: str | None,
+    new_sig: str | None,
+) -> str:
     """Return a short human-readable reason for the detected signature change."""
-    if old_sig is None and new_sig:
+    if kind == "symbol_added":
         return "symbol added"
-    if old_sig and new_sig is None:
+    if kind == "symbol_removed":
         return "symbol removed"
     if not old_sig or not new_sig:
         return "signature changed"
@@ -184,9 +192,9 @@ def _code_change_entry(
         "code_id": change.code_id,
         "old_sig": old_sig,
         "new_sig": new_sig,
-        "reason": _change_reason(old_sig, new_sig),
+        "reason": _change_reason(change.kind, old_sig, new_sig),
         "param_change": _param_change(old_sig, new_sig),
-        "diff": _format_change(old_sig, new_sig),
+        "diff": _format_change(change.kind, old_sig, new_sig),
         "code_file": code_file,
         "code_line": code_line,
     }
@@ -274,8 +282,8 @@ def report_outdated(
                 change = changes_by_id[code_id]
                 old_sig = change.old_signature
                 new_sig = change.new_signature
-                reason = _change_reason(old_sig, new_sig)
-                diff = _format_change(old_sig, new_sig)
+                reason = _change_reason(change.kind, old_sig, new_sig)
+                diff = _format_change(change.kind, old_sig, new_sig)
                 lines.append(f"    Reason: {reason}")
                 lines.append(f"    [{code_id}]  {diff}")
                 code_file, code_line = _code_location(code_id, entities_by_id, project_root)

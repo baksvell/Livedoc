@@ -697,6 +697,36 @@ def test_report_outdated_param_removed_details_in_json() -> None:
     }
 
 
+def test_report_outdated_respects_change_kind_for_legacy_baseline() -> None:
+    from livedoc.core.graph import DocFragment
+    from livedoc.report.reporter import report_outdated
+
+    fragment = DocFragment(
+        "api.md#add",
+        Path("api.md"),
+        5,
+        ["m:add"],
+        "add",
+    )
+    change = CodeChange(
+        code_id="m:add",
+        old_signature=None,
+        new_signature="add(a: int, b: int) -> int",
+        kind="signature_changed",
+    )
+
+    report = report_outdated(
+        [fragment],
+        changes=[change],
+        output_format="json",
+    )
+
+    payload = json.loads(report)
+    code_change = payload["outdated"][0]["code_changes"][0]
+    assert code_change["reason"] == "signature changed"
+    assert code_change["diff"] == "Signature changed"
+
+
 def test_report_unknown_anchors_json() -> None:
     from livedoc.core.graph import DocFragment
     from livedoc.report.reporter import report_outdated

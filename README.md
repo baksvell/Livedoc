@@ -58,7 +58,7 @@ pip install living-doc
 To pin this release:
 
 ```bash
-pip install "living-doc==0.2.0"
+pip install "living-doc==0.2.1"
 ```
 
 Check the installed version:
@@ -400,7 +400,7 @@ jobs:
           cache: pip
 
       - name: Install LiveDoc
-        run: python -m pip install "living-doc==0.2.0"
+        run: python -m pip install "living-doc==0.2.1"
 
       - name: Check documentation freshness
         run: livedoc . --docs docs --quiet

@@ -346,3 +346,54 @@ def test_main_rejects_duplicate_code_ids(
     assert "service:run" in captured.err
     assert "service.ts" in captured.err
     assert "service.js" in captured.err
+
+def test_main_e2e_multi_code_id_reports_only_changed_symbol(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    project_root = _copy_fixture(tmp_path, "e2e_project")
+
+    docs_file = project_root / "docs" / "api.md"
+    docs_file.write_text(
+        (
+            "# API\n\n"
+            '<!-- livedoc: code_id = "math:add", "web.service:render" -->\n'
+            "## Combined API\n\n"
+            "Documentation for both functions.\n"
+        ),
+        encoding="utf-8",
+    )
+
+    assert _run_main(monkeypatch, project_root, "--quiet") == 0
+    _ = capsys.readouterr()
+
+    ts_file = project_root / "web" / "service.ts"
+    ts_file.write_text(
+        (
+            "export function render(name: string, locale: string): string {\n"
+            "  return `${locale}:${name}`;\n"
+            "}\n"
+        ),
+        encoding="utf-8",
+    )
+
+    rc = _run_main(monkeypatch, project_root, "--format", "json", "--quiet")
+    out = capsys.readouterr()
+
+    assert rc == 1
+    payload = json.loads(out.out)
+    assert len(payload["outdated"]) == 1
+
+    code_ids = [
+        change["code_id"]
+        for change in payload["outdated"][0]["code_changes"]
+    ]
+    assert code_ids == ["web.service:render"]
+
+    rc_text = _run_main(monkeypatch, project_root, "--quiet")
+    out_text = capsys.readouterr()
+
+    assert rc_text == 1
+    assert "web.service:render" in out_text.out
+    assert "math:add" not in out_text.out

@@ -7,7 +7,7 @@ import re
 from pathlib import Path
 
 from livedoc.core.graph import DocFragment
-from livedoc.core.signatures import CodeEntity
+from livedoc.core.signatures import CodeChange, CodeEntity
 
 
 def _format_change(old_sig: str | None, new_sig: str | None) -> str:
@@ -173,15 +173,15 @@ def _code_location(
 
 
 def _code_change_entry(
-    code_id: str,
-    sig_pair: tuple[str | None, str | None],
+    change: CodeChange,
     entities_by_id: dict[str, CodeEntity] | None,
     project_root: Path | None,
 ) -> dict:
-    old_sig, new_sig = sig_pair
-    code_file, code_line = _code_location(code_id, entities_by_id, project_root)
+    old_sig = change.old_signature
+    new_sig = change.new_signature
+    code_file, code_line = _code_location(change.code_id, entities_by_id, project_root)
     return {
-        "code_id": code_id,
+        "code_id": change.code_id,
         "old_sig": old_sig,
         "new_sig": new_sig,
         "reason": _change_reason(old_sig, new_sig),
@@ -208,7 +208,7 @@ def _unknown_anchors_json(unknown_refs: list[tuple[str, DocFragment]]) -> list[d
 def report_outdated(
     outdated: list[DocFragment],
     *,
-    changes: dict[str, tuple[str | None, str | None]] | None = None,
+    changes: list[CodeChange] | None = None,
     unknown_refs: list[tuple[str, DocFragment]] | None = None,
     entities_by_id: dict[str, CodeEntity] | None = None,
     project_root: Path | None = None,
@@ -217,13 +217,14 @@ def report_outdated(
 ) -> str:
     """
     Build report: which doc fragments are outdated and what changed.
-    changes: code_id -> (old_sig, new_sig)
+    changes: structured code changes for added, changed, or removed symbols
     unknown_refs: (code_id, fragment) for anchors pointing to missing code
     entities_by_id: current code entities (for code file:line in report)
     project_root: used to show paths relative to project
     output_format: "text" or "json"
     """
-    changes = changes or {}
+    changes = changes or []
+    changes_by_id = {change.code_id: change for change in changes}
     unknown_refs = unknown_refs or []
     has_unknown = len(unknown_refs) > 0
     has_outdated = len(outdated) > 0
@@ -239,13 +240,12 @@ def report_outdated(
                     "heading": f.heading,
                     "code_changes": [
                         _code_change_entry(
-                            cid,
-                            changes.get(cid, (None, None)),
+                            changes_by_id[cid],
                             entities_by_id,
                             project_root,
                         )
                         for cid in f.code_ids
-                        if cid in changes
+                        if cid in changes_by_id
                     ],
                 }
                 for f in outdated
@@ -269,9 +269,11 @@ def report_outdated(
             if f.heading:
                 lines.append(f"    Section: {f.heading}")
             for code_id in f.code_ids:
-                if code_id not in changes:
+                if code_id not in changes_by_id:
                     continue
-                old_sig, new_sig = changes.get(code_id, (None, None))
+                change = changes_by_id[code_id]
+                old_sig = change.old_signature
+                new_sig = change.new_signature
                 reason = _change_reason(old_sig, new_sig)
                 diff = _format_change(old_sig, new_sig)
                 lines.append(f"    Reason: {reason}")

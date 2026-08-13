@@ -288,12 +288,6 @@ def run_check(
     changed = {change.code_id for change in structured_changes}
     outdated = graph.get_outdated_fragments(changed)
 
-    # Temporary adapter for the existing reporter contract.
-    changes = {
-        change.code_id: (change.old_signature, change.new_signature)
-        for change in structured_changes
-    }
-
     if update_signatures:
         cs = CodeSignatures(current_sigs, readable=current_readable)
         cs.save(sig_path, readable=current_readable)
@@ -302,7 +296,7 @@ def run_check(
 
     report = report_outdated(
         outdated,
-        changes=changes,
+        changes=structured_changes,
         unknown_refs=unknown_refs,
         entities_by_id=entities_by_id,
         project_root=root,

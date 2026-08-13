@@ -121,6 +121,7 @@ def test_code_signatures_builds_added_change_details() -> None:
     assert len(changes) == 1
     change = changes[0]
     assert change.code_id == "m:add"
+    assert change.kind == "symbol_added"
     assert change.old_signature is None
     assert change.new_signature == "add(a: int) -> int"
 
@@ -136,6 +137,7 @@ def test_code_signatures_builds_removed_change_details() -> None:
     assert len(changes) == 1
     change = changes[0]
     assert change.code_id == "m:add"
+    assert change.kind == "symbol_removed"
     assert change.old_signature == "add(a: int) -> int"
     assert change.new_signature is None
 
@@ -153,8 +155,21 @@ def test_code_signatures_builds_change_details() -> None:
     assert len(changes) == 1
     change = changes[0]
     assert change.code_id == "m:add"
+    assert change.kind == "signature_changed"
     assert change.old_signature == "add(a: int) -> int"
     assert change.new_signature == "add(a: int, b: int) -> int"
+
+
+def test_code_signatures_change_kind_does_not_depend_on_readable_baseline() -> None:
+    stored = CodeSignatures({"m:add": "hash-old"})
+
+    changes = stored.build_changes(
+        {"m:add": "hash-new"},
+        {"m:add": "add(a: int, b: int) -> int"},
+    )
+
+    assert len(changes) == 1
+    assert changes[0].kind == "signature_changed"
 
 
 def test_parse_python_module_ignores_tests() -> None:
@@ -255,6 +270,7 @@ def test_report_outdated_with_changes() -> None:
                 code_id="m:add",
                 old_signature="add(a, b) -> int",
                 new_signature="add(a, b, c) -> int",
+                kind="signature_changed",
             )
         ]
         entities = {
@@ -292,6 +308,7 @@ def test_report_outdated_json_format() -> None:
                 code_id="m:add",
                 old_signature="add(a)",
                 new_signature="add(a, b)",
+                kind="signature_changed",
             )
         ]
         entities = {
@@ -338,6 +355,7 @@ def test_report_outdated_accepts_structured_code_changes() -> None:
             code_id="m:add",
             old_signature="add(a)",
             new_signature="add(a, b)",
+            kind="signature_changed",
         )
     ]
 
@@ -397,6 +415,7 @@ def test_report_outdated_removed_symbol_shows_hint() -> None:
             code_id="m:gone",
             old_signature="gone() -> void",
             new_signature=None,
+            kind="symbol_removed",
         )
     ]
     report = report_outdated([f], changes=changes, entities_by_id={})
@@ -420,6 +439,7 @@ def test_report_outdated_return_type_reason_in_json() -> None:
                 code_id="m:compute",
                 old_signature="compute(a) -> int",
                 new_signature="compute(a) -> str",
+                kind="signature_changed",
             )
         ]
         entities = {
@@ -458,6 +478,7 @@ def test_report_outdated_param_type_reason_in_json() -> None:
                 code_id="m:convert",
                 old_signature="convert(a: int) -> int",
                 new_signature="convert(a: str) -> int",
+                kind="signature_changed",
             )
         ]
         entities = {
@@ -504,6 +525,7 @@ def test_report_outdated_param_default_reason_in_json() -> None:
                 code_id="m:limit",
                 old_signature="limit(n: int = 10) -> int",
                 new_signature="limit(n: int = 20) -> int",
+                kind="signature_changed",
             )
         ]
         entities = {
@@ -550,6 +572,7 @@ def test_report_outdated_param_order_reason_in_json() -> None:
                 code_id="m:pair",
                 old_signature="pair(a: int, b: int) -> int",
                 new_signature="pair(b: int, a: int) -> int",
+                kind="signature_changed",
             )
         ]
         entities = {
@@ -596,6 +619,7 @@ def test_report_outdated_param_added_details_in_json() -> None:
                 code_id="m:add",
                 old_signature="add(a: int) -> int",
                 new_signature="add(a: int, b: int) -> int",
+                kind="signature_changed",
             )
         ]
         entities = {
@@ -642,6 +666,7 @@ def test_report_outdated_param_removed_details_in_json() -> None:
                 code_id="m:add",
                 old_signature="add(a: int, b: int) -> int",
                 new_signature="add(a: int) -> int",
+                kind="signature_changed",
             )
         ]
         entities = {

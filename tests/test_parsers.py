@@ -6,7 +6,7 @@ from pathlib import Path
 import pytest
 
 from livedoc.core.graph import DocGraph
-from livedoc.core.signatures import CodeSignatures, signature_hash
+from livedoc.core.signatures import CodeChange, CodeSignatures, signature_hash
 from livedoc.parsers.doc_parser import parse_doc_file
 from livedoc.parsers.go_parser import parse_go_file, parse_go_module
 from livedoc.parsers.python_parser import parse_python_file
@@ -250,7 +250,13 @@ def test_report_outdated_with_changes() -> None:
         code_file = root / "calc.py"
         code_file.write_text("def add(): pass\n", encoding="utf-8")
         f = DocFragment("api.md#add", Path("api.md"), 5, ["m:add"], "add")
-        changes = {"m:add": ("add(a, b) -> int", "add(a, b, c) -> int")}
+        changes = [
+            CodeChange(
+                code_id="m:add",
+                old_signature="add(a, b) -> int",
+                new_signature="add(a, b, c) -> int",
+            )
+        ]
         entities = {
             "m:add": CodeEntity(
                 code_id="m:add",
@@ -281,7 +287,13 @@ def test_report_outdated_json_format() -> None:
         cf = root / "m.py"
         cf.write_text("x", encoding="utf-8")
         f = DocFragment("api.md#add", Path("api.md"), 5, ["m:add"], "add")
-        changes = {"m:add": ("add(a)", "add(a, b)")}
+        changes = [
+            CodeChange(
+                code_id="m:add",
+                old_signature="add(a)",
+                new_signature="add(a, b)",
+            )
+        ]
         entities = {
             "m:add": CodeEntity(
                 code_id="m:add",
@@ -305,6 +317,44 @@ def test_report_outdated_json_format() -> None:
     assert '"reason": "params changed"' in report
     assert '"code_file": "m.py"' in report
     assert '"code_line": 7' in report
+
+
+def test_report_outdated_accepts_structured_code_changes() -> None:
+    import json
+
+    from livedoc.core.graph import DocFragment
+    from livedoc.core.signatures import CodeChange
+    from livedoc.report.reporter import report_outdated
+
+    fragment = DocFragment(
+        "api.md#add",
+        Path("api.md"),
+        5,
+        ["m:add"],
+        "add",
+    )
+    changes = [
+        CodeChange(
+            code_id="m:add",
+            old_signature="add(a)",
+            new_signature="add(a, b)",
+        )
+    ]
+
+    report = report_outdated(
+        [fragment],
+        changes=changes,
+        output_format="json",
+    )
+
+    payload = json.loads(report)
+    code_changes = payload["outdated"][0]["code_changes"]
+
+    assert len(code_changes) == 1
+    assert code_changes[0]["code_id"] == "m:add"
+    assert code_changes[0]["old_sig"] == "add(a)"
+    assert code_changes[0]["new_sig"] == "add(a, b)"
+    assert code_changes[0]["reason"] == "params changed"
 
 
 def test_report_up_to_date_json() -> None:
@@ -342,7 +392,13 @@ def test_report_outdated_removed_symbol_shows_hint() -> None:
     from livedoc.report.reporter import report_outdated
 
     f = DocFragment("api.md#gone", Path("api.md"), 1, ["m:gone"], "gone")
-    changes = {"m:gone": ("gone() -> void", None)}
+    changes = [
+        CodeChange(
+            code_id="m:gone",
+            old_signature="gone() -> void",
+            new_signature=None,
+        )
+    ]
     report = report_outdated([f], changes=changes, entities_by_id={})
     assert "removed from codebase" in report
     assert "Reason: symbol removed" in report
@@ -359,7 +415,13 @@ def test_report_outdated_return_type_reason_in_json() -> None:
         cf = root / "m.py"
         cf.write_text("x", encoding="utf-8")
         f = DocFragment("api.md#compute", Path("api.md"), 5, ["m:compute"], "compute")
-        changes = {"m:compute": ("compute(a) -> int", "compute(a) -> str")}
+        changes = [
+            CodeChange(
+                code_id="m:compute",
+                old_signature="compute(a) -> int",
+                new_signature="compute(a) -> str",
+            )
+        ]
         entities = {
             "m:compute": CodeEntity(
                 code_id="m:compute",
@@ -391,7 +453,13 @@ def test_report_outdated_param_type_reason_in_json() -> None:
         cf = root / "m.py"
         cf.write_text("x", encoding="utf-8")
         f = DocFragment("api.md#convert", Path("api.md"), 5, ["m:convert"], "convert")
-        changes = {"m:convert": ("convert(a: int) -> int", "convert(a: str) -> int")}
+        changes = [
+            CodeChange(
+                code_id="m:convert",
+                old_signature="convert(a: int) -> int",
+                new_signature="convert(a: str) -> int",
+            )
+        ]
         entities = {
             "m:convert": CodeEntity(
                 code_id="m:convert",
@@ -431,7 +499,13 @@ def test_report_outdated_param_default_reason_in_json() -> None:
         cf = root / "m.py"
         cf.write_text("x", encoding="utf-8")
         f = DocFragment("api.md#limit", Path("api.md"), 5, ["m:limit"], "limit")
-        changes = {"m:limit": ("limit(n: int = 10) -> int", "limit(n: int = 20) -> int")}
+        changes = [
+            CodeChange(
+                code_id="m:limit",
+                old_signature="limit(n: int = 10) -> int",
+                new_signature="limit(n: int = 20) -> int",
+            )
+        ]
         entities = {
             "m:limit": CodeEntity(
                 code_id="m:limit",
@@ -471,7 +545,13 @@ def test_report_outdated_param_order_reason_in_json() -> None:
         cf = root / "m.py"
         cf.write_text("x", encoding="utf-8")
         f = DocFragment("api.md#pair", Path("api.md"), 5, ["m:pair"], "pair")
-        changes = {"m:pair": ("pair(a: int, b: int) -> int", "pair(b: int, a: int) -> int")}
+        changes = [
+            CodeChange(
+                code_id="m:pair",
+                old_signature="pair(a: int, b: int) -> int",
+                new_signature="pair(b: int, a: int) -> int",
+            )
+        ]
         entities = {
             "m:pair": CodeEntity(
                 code_id="m:pair",
@@ -511,7 +591,13 @@ def test_report_outdated_param_added_details_in_json() -> None:
         cf = root / "m.py"
         cf.write_text("x", encoding="utf-8")
         f = DocFragment("api.md#add", Path("api.md"), 5, ["m:add"], "add")
-        changes = {"m:add": ("add(a: int) -> int", "add(a: int, b: int) -> int")}
+        changes = [
+            CodeChange(
+                code_id="m:add",
+                old_signature="add(a: int) -> int",
+                new_signature="add(a: int, b: int) -> int",
+            )
+        ]
         entities = {
             "m:add": CodeEntity(
                 code_id="m:add",
@@ -551,7 +637,13 @@ def test_report_outdated_param_removed_details_in_json() -> None:
         cf = root / "m.py"
         cf.write_text("x", encoding="utf-8")
         f = DocFragment("api.md#add", Path("api.md"), 5, ["m:add"], "add")
-        changes = {"m:add": ("add(a: int, b: int) -> int", "add(a: int) -> int")}
+        changes = [
+            CodeChange(
+                code_id="m:add",
+                old_signature="add(a: int, b: int) -> int",
+                new_signature="add(a: int) -> int",
+            )
+        ]
         entities = {
             "m:add": CodeEntity(
                 code_id="m:add",

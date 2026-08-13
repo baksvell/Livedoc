@@ -36,6 +36,28 @@ def test_signature_hash_changes_with_arg_order() -> None:
     assert h1 != h2
 
 
+def test_parse_readable_signature_with_return_type() -> None:
+    from livedoc.core.signatures import parse_readable_signature
+
+    assert parse_readable_signature("add(a: int, b: int) -> int") == (
+        "add",
+        ["a: int", "b: int"],
+        "int",
+    )
+
+
+def test_parse_readable_signature_without_return_type() -> None:
+    from livedoc.core.signatures import parse_readable_signature
+
+    assert parse_readable_signature("ping()") == ("ping", [], "")
+
+
+def test_parse_readable_signature_rejects_invalid_signature() -> None:
+    from livedoc.core.signatures import parse_readable_signature
+
+    assert parse_readable_signature("not a signature") is None
+
+
 def test_code_entity_hash_uses_signature_args() -> None:
     from livedoc.core.signatures import CodeEntity
 

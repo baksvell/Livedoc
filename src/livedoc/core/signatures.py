@@ -7,9 +7,22 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Literal
+
+
+def parse_readable_signature(sig: str) -> tuple[str, list[str], str] | None:
+    """Parse 'name(a, b) -> ret' into (name, args, ret)."""
+    match = re.fullmatch(r"(.+?)\((.*)\)(?:\s*->\s*(.*))?", sig.strip())
+    if not match:
+        return None
+    name = match.group(1).strip()
+    args_raw = match.group(2).strip()
+    ret = (match.group(3) or "").strip()
+    args = [part.strip() for part in args_raw.split(",") if part.strip()] if args_raw else []
+    return name, args, ret
 
 
 def signature_hash(name: str, args: list[str], return_annotation: str = "") -> str:

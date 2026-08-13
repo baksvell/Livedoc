@@ -3,11 +3,15 @@
 from __future__ import annotations
 
 import json
-import re
 from pathlib import Path
 
 from livedoc.core.graph import DocFragment
-from livedoc.core.signatures import CodeChange, CodeChangeKind, CodeEntity
+from livedoc.core.signatures import (
+    CodeChange,
+    CodeChangeKind,
+    CodeEntity,
+    parse_readable_signature,
+)
 
 
 def _format_change(
@@ -23,18 +27,6 @@ def _format_change(
     if old_sig and new_sig:
         return f"{old_sig}  ->  {new_sig}"
     return "Signature changed"
-
-
-def _parse_signature(sig: str) -> tuple[str, list[str], str] | None:
-    """Parse 'name(a, b) -> ret' into (name, args, ret)."""
-    match = re.fullmatch(r"(.+?)\((.*)\)(?:\s*->\s*(.*))?", sig.strip())
-    if not match:
-        return None
-    name = match.group(1).strip()
-    args_raw = match.group(2).strip()
-    ret = (match.group(3) or "").strip()
-    args = [part.strip() for part in args_raw.split(",") if part.strip()] if args_raw else []
-    return name, args, ret
 
 
 def _parse_param(param: str) -> tuple[str, str, str]:
@@ -128,8 +120,8 @@ def _change_reason(
     if not old_sig or not new_sig:
         return "signature changed"
 
-    old_parts = _parse_signature(old_sig)
-    new_parts = _parse_signature(new_sig)
+    old_parts = parse_readable_signature(old_sig)
+    new_parts = parse_readable_signature(new_sig)
     if not old_parts or not new_parts:
         return "signature changed"
 
@@ -152,8 +144,8 @@ def _param_change(old_sig: str | None, new_sig: str | None) -> dict | None:
     """Return machine-readable details about parameter-level changes."""
     if not old_sig or not new_sig:
         return None
-    old_parts = _parse_signature(old_sig)
-    new_parts = _parse_signature(new_sig)
+    old_parts = parse_readable_signature(old_sig)
+    new_parts = parse_readable_signature(new_sig)
     if not old_parts or not new_parts:
         return None
     _, old_args, _ = old_parts

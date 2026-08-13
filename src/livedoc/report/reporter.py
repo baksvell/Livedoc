@@ -245,6 +245,7 @@ def report_outdated(
                             project_root,
                         )
                         for cid in f.code_ids
+                        if cid in changes
                     ],
                 }
                 for f in outdated
@@ -268,6 +269,8 @@ def report_outdated(
             if f.heading:
                 lines.append(f"    Section: {f.heading}")
             for code_id in f.code_ids:
+                if code_id not in changes:
+                    continue
                 old_sig, new_sig = changes.get(code_id, (None, None))
                 reason = _change_reason(old_sig, new_sig)
                 diff = _format_change(old_sig, new_sig)

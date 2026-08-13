@@ -284,18 +284,15 @@ def run_check(
             print("First run: code signatures saved. Future code changes will mark linked docs as outdated.")
         return 0
 
-    changed = stored.changed_code_ids(current_sigs)
+    structured_changes = stored.build_changes(current_sigs, current_readable)
+    changed = {change.code_id for change in structured_changes}
     outdated = graph.get_outdated_fragments(changed)
 
-    # Change details: code_id -> (old_sig, new_sig)
-    changes: dict[str, tuple[str | None, str | None]] = {}
-    for code_id in changed:
-        old_sig = stored.get_readable(code_id)
-        if code_id in entities_by_id:
-            new_sig = entities_by_id[code_id].format_signature(detailed=True)
-        else:
-            new_sig = None  # entity removed
-        changes[code_id] = (old_sig, new_sig)
+    # Temporary adapter for the existing reporter contract.
+    changes = {
+        change.code_id: (change.old_signature, change.new_signature)
+        for change in structured_changes
+    }
 
     if update_signatures:
         cs = CodeSignatures(current_sigs, readable=current_readable)

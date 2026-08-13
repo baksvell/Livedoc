@@ -44,6 +44,15 @@ class CodeEntity:
         return f"{self.name}({args_str}){ret}"
 
 
+@dataclass(frozen=True)
+class CodeChange:
+    """A detected change to one code symbol."""
+
+    code_id: str
+    old_signature: str | None
+    new_signature: str | None
+
+
 @dataclass
 class CodeSignatures:
     """Store code signatures: code_id -> hash, optionally readable. Compare and get changed code_id."""
@@ -66,6 +75,21 @@ class CodeSignatures:
     def get_readable(self, code_id: str) -> str | None:
         """Get stored readable signature if any."""
         return self.readable.get(code_id)
+
+    def build_changes(
+        self,
+        current: dict[str, str],
+        current_readable: dict[str, str],
+    ) -> list[CodeChange]:
+        """Build structured details for added, changed, or removed code symbols."""
+        return [
+            CodeChange(
+                code_id=code_id,
+                old_signature=self.get_readable(code_id),
+                new_signature=current_readable.get(code_id),
+            )
+            for code_id in sorted(self.changed_code_ids(current))
+        ]
 
     def update(self, current: dict[str, str], readable: dict[str, str] | None = None) -> None:
         """Update stored signatures to current state."""

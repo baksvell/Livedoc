@@ -25,6 +25,19 @@ def parse_readable_signature(sig: str) -> tuple[str, list[str], str] | None:
     return name, args, ret
 
 
+def _has_single_added_parameter(
+    old_args: list[str],
+    new_args: list[str],
+) -> bool:
+    """Return True when new_args differs only by one added parameter."""
+    if len(new_args) != len(old_args) + 1:
+        return False
+    return any(
+        new_args[:index] + new_args[index + 1 :] == old_args
+        for index in range(len(new_args))
+    )
+
+
 def signature_hash(name: str, args: list[str], return_annotation: str = "") -> str:
     """Build stable hash from name and signature (args + return)."""
     payload = json.dumps(
@@ -63,6 +76,8 @@ CodeChangeKind = Literal[
     "symbol_removed",
     "signature_changed",
     "return_type_changed",
+    "parameter_added",
+    "parameter_removed",
 ]
 
 
@@ -123,12 +138,14 @@ class CodeSignatures:
                     if old_parts and new_parts:
                         old_name, old_args, old_return = old_parts
                         new_name, new_args, new_return = new_parts
-                        if (
-                            old_name == new_name
-                            and old_args == new_args
-                            and old_return != new_return
-                        ):
-                            kind = "return_type_changed"
+                        if old_name == new_name:
+                            if old_args == new_args and old_return != new_return:
+                                kind = "return_type_changed"
+                            elif old_return == new_return:
+                                if _has_single_added_parameter(old_args, new_args):
+                                    kind = "parameter_added"
+                                elif _has_single_added_parameter(new_args, old_args):
+                                    kind = "parameter_removed"
 
             changes.append(
                 CodeChange(

@@ -25,6 +25,47 @@ def parse_readable_signature(sig: str) -> tuple[str, list[str], str] | None:
     return name, args, ret
 
 
+def parse_readable_parameter(param: str) -> tuple[str, str, str]:
+    """Parse parameter into (name, type, default)."""
+    raw = param.strip()
+    default_expr = ""
+    if "=" in raw:
+        before_default, after_default = raw.split("=", 1)
+        raw = before_default.strip()
+        default_expr = after_default.strip()
+
+    type_expr = ""
+    name = raw
+    if ":" in raw:
+        before_type, after_type = raw.split(":", 1)
+        name = before_type.strip()
+        type_expr = after_type.strip()
+
+    return name, type_expr, default_expr
+
+
+def _has_single_parameter_type_change(
+    old_args: list[str],
+    new_args: list[str],
+) -> bool:
+    """Return True when exactly one parameter type changed."""
+    if len(old_args) != len(new_args):
+        return False
+
+    type_changes = 0
+    for old_arg, new_arg in zip(old_args, new_args):
+        old_name, old_type, old_default = parse_readable_parameter(old_arg)
+        new_name, new_type, new_default = parse_readable_parameter(new_arg)
+
+        if old_name != new_name or old_default != new_default:
+            return False
+
+        if old_type != new_type:
+            type_changes += 1
+
+    return type_changes == 1
+
+
 def _has_single_added_parameter(
     old_args: list[str],
     new_args: list[str],
@@ -78,6 +119,7 @@ CodeChangeKind = Literal[
     "return_type_changed",
     "parameter_added",
     "parameter_removed",
+    "parameter_type_changed",
 ]
 
 
@@ -146,6 +188,8 @@ class CodeSignatures:
                                     kind = "parameter_added"
                                 elif _has_single_added_parameter(new_args, old_args):
                                     kind = "parameter_removed"
+                                elif _has_single_parameter_type_change(old_args, new_args):
+                                    kind = "parameter_type_changed"
 
             changes.append(
                 CodeChange(

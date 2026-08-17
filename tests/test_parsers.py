@@ -317,6 +317,36 @@ def test_code_signatures_keeps_general_kind_when_parameter_default_and_return_ch
     assert changes[0].kind == "signature_changed"
 
 
+def test_code_signatures_builds_parameter_order_changed_kind() -> None:
+    stored = CodeSignatures(
+        {"m:add": "hash-old"},
+        readable={"m:add": "add(a: int, b: str) -> int"},
+    )
+
+    changes = stored.build_changes(
+        {"m:add": "hash-new"},
+        {"m:add": "add(b: str, a: int) -> int"},
+    )
+
+    assert len(changes) == 1
+    assert changes[0].kind == "parameter_order_changed"
+
+
+def test_code_signatures_keeps_general_kind_when_parameter_order_and_return_change() -> None:
+    stored = CodeSignatures(
+        {"m:add": "hash-old"},
+        readable={"m:add": "add(a: int, b: str) -> int"},
+    )
+
+    changes = stored.build_changes(
+        {"m:add": "hash-new"},
+        {"m:add": "add(b: str, a: int) -> str"},
+    )
+
+    assert len(changes) == 1
+    assert changes[0].kind == "signature_changed"
+
+
 def test_code_signatures_change_kind_does_not_depend_on_readable_baseline() -> None:
     stored = CodeSignatures({"m:add": "hash-old"})
 

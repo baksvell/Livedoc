@@ -164,7 +164,7 @@ def test_code_signatures_builds_removed_change_details() -> None:
     assert change.new_signature is None
 
 
-def test_code_signatures_builds_change_details() -> None:
+def test_code_signatures_builds_parameter_added_change_details() -> None:
     stored = CodeSignatures(
         {"m:add": "hash-old"},
         readable={"m:add": "add(a: int) -> int"},
@@ -177,7 +177,7 @@ def test_code_signatures_builds_change_details() -> None:
     assert len(changes) == 1
     change = changes[0]
     assert change.code_id == "m:add"
-    assert change.kind == "signature_changed"
+    assert change.kind == "parameter_added"
     assert change.old_signature == "add(a: int) -> int"
     assert change.new_signature == "add(a: int, b: int) -> int"
 
@@ -206,6 +206,51 @@ def test_code_signatures_keeps_general_kind_when_args_and_return_change() -> Non
     changes = stored.build_changes(
         {"m:add": "hash-new"},
         {"m:add": "add(a: int, b: int) -> str"},
+    )
+
+    assert len(changes) == 1
+    assert changes[0].kind == "signature_changed"
+
+
+def test_code_signatures_builds_parameter_removed_kind() -> None:
+    stored = CodeSignatures(
+        {"m:add": "hash-old"},
+        readable={"m:add": "add(a: int, b: int) -> int"},
+    )
+
+    changes = stored.build_changes(
+        {"m:add": "hash-new"},
+        {"m:add": "add(a: int) -> int"},
+    )
+
+    assert len(changes) == 1
+    assert changes[0].kind == "parameter_removed"
+
+
+def test_code_signatures_keeps_general_kind_when_parameter_added_and_return_changes() -> None:
+    stored = CodeSignatures(
+        {"m:add": "hash-old"},
+        readable={"m:add": "add(a: int) -> int"},
+    )
+
+    changes = stored.build_changes(
+        {"m:add": "hash-new"},
+        {"m:add": "add(a: int, b: int) -> str"},
+    )
+
+    assert len(changes) == 1
+    assert changes[0].kind == "signature_changed"
+
+
+def test_code_signatures_keeps_general_kind_when_parameter_removed_and_return_changes() -> None:
+    stored = CodeSignatures(
+        {"m:add": "hash-old"},
+        readable={"m:add": "add(a: int, b: int) -> int"},
+    )
+
+    changes = stored.build_changes(
+        {"m:add": "hash-new"},
+        {"m:add": "add(a: int) -> str"},
     )
 
     assert len(changes) == 1

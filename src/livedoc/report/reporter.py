@@ -10,6 +10,7 @@ from livedoc.core.signatures import (
     CodeChange,
     CodeChangeKind,
     CodeEntity,
+    parse_readable_parameter,
     parse_readable_signature,
 )
 
@@ -29,29 +30,12 @@ def _format_change(
     return "Signature changed"
 
 
-def _parse_param(param: str) -> tuple[str, str, str]:
-    """Parse param into (name, type, default) from 'name: type = default'."""
-    raw = param.strip()
-    default_expr = ""
-    if "=" in raw:
-        before_default, after_default = raw.split("=", 1)
-        raw = before_default.strip()
-        default_expr = after_default.strip()
-    type_expr = ""
-    name = raw.strip()
-    if ":" in raw:
-        before_type, after_type = raw.split(":", 1)
-        name = before_type.strip()
-        type_expr = after_type.strip()
-    return name, type_expr, default_expr
-
-
 def _param_change_info(old_args: list[str], new_args: list[str]) -> tuple[str, dict | None]:
     """Return (reason, machine-readable param_change) for parameter changes."""
     if old_args == new_args:
         return "", None
-    old_names = [_parse_param(arg)[0] for arg in old_args]
-    new_names = [_parse_param(arg)[0] for arg in new_args]
+    old_names = [parse_readable_parameter(arg)[0] for arg in old_args]
+    new_names = [parse_readable_parameter(arg)[0] for arg in new_args]
     if old_names != new_names:
         if sorted(old_names) == sorted(new_names):
             return "param order changed", {
@@ -85,8 +69,8 @@ def _param_change_info(old_args: list[str], new_args: list[str]) -> tuple[str, d
             "new": new_names,
         }
 
-    old_by_name = {name: (typ, default) for name, typ, default in (_parse_param(arg) for arg in old_args)}
-    new_by_name = {name: (typ, default) for name, typ, default in (_parse_param(arg) for arg in new_args)}
+    old_by_name = {name: (typ, default) for name, typ, default in (parse_readable_parameter(arg) for arg in old_args)}
+    new_by_name = {name: (typ, default) for name, typ, default in (parse_readable_parameter(arg) for arg in new_args)}
     for name in old_names:
         old_type, old_default = old_by_name.get(name, ("", ""))
         new_type, new_default = new_by_name.get(name, ("", ""))

@@ -166,6 +166,7 @@ def _code_change_entry(
     code_file, code_line = _code_location(change.code_id, entities_by_id, project_root)
     return {
         "code_id": change.code_id,
+        "kind": change.kind,
         "old_sig": old_sig,
         "new_sig": new_sig,
         "reason": _change_reason(change.kind, old_sig, new_sig),

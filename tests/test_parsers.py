@@ -557,6 +557,7 @@ def test_report_outdated_accepts_structured_code_changes() -> None:
 
     assert len(code_changes) == 1
     assert code_changes[0]["code_id"] == "m:add"
+    assert code_changes[0]["kind"] == "signature_changed"
     assert code_changes[0]["old_sig"] == "add(a)"
     assert code_changes[0]["new_sig"] == "add(a, b)"
     assert code_changes[0]["reason"] == "params changed"

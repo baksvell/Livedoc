@@ -44,6 +44,28 @@ def parse_readable_parameter(param: str) -> tuple[str, str, str]:
     return name, type_expr, default_expr
 
 
+def _has_single_parameter_default_change(
+    old_args: list[str],
+    new_args: list[str],
+) -> bool:
+    """Return True when exactly one parameter default changed."""
+    if len(old_args) != len(new_args):
+        return False
+
+    default_changes = 0
+    for old_arg, new_arg in zip(old_args, new_args):
+        old_name, old_type, old_default = parse_readable_parameter(old_arg)
+        new_name, new_type, new_default = parse_readable_parameter(new_arg)
+
+        if old_name != new_name or old_type != new_type:
+            return False
+
+        if old_default != new_default:
+            default_changes += 1
+
+    return default_changes == 1
+
+
 def _has_single_parameter_type_change(
     old_args: list[str],
     new_args: list[str],
@@ -120,6 +142,7 @@ CodeChangeKind = Literal[
     "parameter_added",
     "parameter_removed",
     "parameter_type_changed",
+    "parameter_default_changed",
 ]
 
 
@@ -190,6 +213,8 @@ class CodeSignatures:
                                     kind = "parameter_removed"
                                 elif _has_single_parameter_type_change(old_args, new_args):
                                     kind = "parameter_type_changed"
+                                elif _has_single_parameter_default_change(old_args, new_args):
+                                    kind = "parameter_default_changed"
 
             changes.append(
                 CodeChange(

@@ -44,6 +44,20 @@ def parse_readable_parameter(param: str) -> tuple[str, str, str]:
     return name, type_expr, default_expr
 
 
+def _has_parameter_order_change(
+    old_args: list[str],
+    new_args: list[str],
+) -> bool:
+    """Return True when parameters only changed order."""
+    if len(old_args) != len(new_args) or old_args == new_args:
+        return False
+
+    old_params = [parse_readable_parameter(arg) for arg in old_args]
+    new_params = [parse_readable_parameter(arg) for arg in new_args]
+
+    return sorted(old_params) == sorted(new_params)
+
+
 def _has_single_parameter_default_change(
     old_args: list[str],
     new_args: list[str],
@@ -143,6 +157,7 @@ CodeChangeKind = Literal[
     "parameter_removed",
     "parameter_type_changed",
     "parameter_default_changed",
+    "parameter_order_changed",
 ]
 
 
@@ -215,6 +230,8 @@ class CodeSignatures:
                                     kind = "parameter_type_changed"
                                 elif _has_single_parameter_default_change(old_args, new_args):
                                     kind = "parameter_default_changed"
+                                elif _has_parameter_order_change(old_args, new_args):
+                                    kind = "parameter_order_changed"
 
             changes.append(
                 CodeChange(

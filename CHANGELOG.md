@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+## [Unreleased]
+
+### Added
+
+* Added structured change kinds for symbol additions and removals, return type changes, and parameter additions, removals, type changes, default changes, and order changes
+* JSON reports now expose the structured change kind as `code_changes[].kind`
+
 ## [0.2.1] - 2026-08-13
 
 ### Fixed

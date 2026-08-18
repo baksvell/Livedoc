@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.3.2] - 2026-08-18
+
+### Fixed
+
+* Python `@overload` declarations are no longer emitted as separate code entities, preventing duplicate `code_id` errors for overloaded functions and methods
+
 ## [0.3.1] - 2026-08-18
 
 ### Fixed

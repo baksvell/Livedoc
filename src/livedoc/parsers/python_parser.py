@@ -30,6 +30,15 @@ def _is_static_method(node: FunctionNode) -> bool:
     return False
 
 
+def _is_overload(node: FunctionNode) -> bool:
+    """Return whether a function is decorated with ``@overload``."""
+    for decorator in node.decorator_list:
+        if isinstance(decorator, ast.Name) and decorator.id == "overload":
+            return True
+        if isinstance(decorator, ast.Attribute) and decorator.attr == "overload":
+            return True
+    return False
+
 def _format_annotation(annotation: ast.expr | None) -> str:
     """Return a source-like representation of a type annotation."""
     if annotation is None:
@@ -156,10 +165,14 @@ def parse_python_file(file_path: Path, module_path: str) -> list[CodeEntity]:
 
     for node in tree.body:
         if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            if _is_overload(node):
+                continue
             entities.append(_build_entity(node, file_path, module_path))
         elif isinstance(node, ast.ClassDef):
             for child in node.body:
                 if isinstance(child, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                    if _is_overload(child):
+                        continue
                     entities.append(_build_entity(child, file_path, module_path, node.name))
     return entities
 

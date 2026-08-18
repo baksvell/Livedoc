@@ -24,6 +24,35 @@ Adds two numbers and returns the result.
 
 On the first run, LiveDoc stores the current code signatures. On later runs, it compares the current code with the stored baseline and reports documentation connected to changed symbols.
 
+## See It in Action
+
+Suppose your documentation is linked to this function:
+
+```python
+def add(a: int, b: int) -> int:
+    return a + b
+```
+
+Later, the code changes:
+
+```python
+def add(a: int, b: int = 0) -> int:
+    return a + b
+```
+
+LiveDoc detects the structured change and points to documentation that may now be outdated:
+
+```text
+Reason: param default changed
+docs/api.md#add
+```
+
+Review the linked documentation, update it if needed, then accept the new baseline:
+
+```bash
+livedoc . --docs docs --update
+```
+
 ## Features
 
 - Links Markdown sections to code through invisible HTML comment anchors

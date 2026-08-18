@@ -1506,6 +1506,28 @@ def test_typescript_overloads_return_one_entity(tmp_path: Path) -> None:
     assert matches[0].signature_args == ["value: string | number"]
 
 
+def test_python_overloads_return_one_entity(tmp_path: Path) -> None:
+    source = tmp_path / "service.py"
+    source.write_text(
+        (
+            "from typing import overload\n\n"
+            "class Service:\n"
+            "    @overload\n"
+            "    def run(self, value: str) -> str: ...\n\n"
+            "    @overload\n"
+            "    def run(self, value: int) -> str: ...\n\n"
+            "    def run(self, value: str | int) -> str:\n"
+            "        return str(value)\n"
+        ),
+        encoding="utf-8",
+    )
+
+    entities = parse_python_file(source, "service")
+    matches = [entity for entity in entities if entity.code_id == "service:Service.run"]
+
+    assert len(matches) == 1
+    assert matches[0].signature_args == ["value: str | int"]
+
 def test_parse_python_file_accepts_utf8_bom(tmp_path: Path) -> None:
     source = tmp_path / "bom.py"
     source.write_text(

@@ -1504,3 +1504,15 @@ def test_typescript_overloads_return_one_entity(tmp_path: Path) -> None:
 
     assert len(matches) == 1
     assert matches[0].signature_args == ["value: string | number"]
+
+
+def test_parse_python_file_accepts_utf8_bom(tmp_path: Path) -> None:
+    source = tmp_path / "bom.py"
+    source.write_text(
+        "def add(a: int, b: int) -> int:\n    return a + b\n",
+        encoding="utf-8-sig",
+    )
+
+    entities = parse_python_file(source, "bom")
+
+    assert [entity.code_id for entity in entities] == ["bom:add"]

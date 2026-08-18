@@ -151,7 +151,7 @@ def _build_entity(
 def parse_python_file(file_path: Path, module_path: str) -> list[CodeEntity]:
     """Parse one ``.py`` file and return top-level functions and class methods."""
     entities: list[CodeEntity] = []
-    source = file_path.read_text(encoding="utf-8")
+    source = file_path.read_text(encoding="utf-8-sig")
     tree = ast.parse(source, filename=str(file_path))
 
     for node in tree.body:

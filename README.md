@@ -358,8 +358,11 @@ The JSON report contains:
 - `outdated`
 - `unknown_anchors`
 - signature differences
+- structured code change kind in `code_changes[].kind`
 - parameter-level change details when available
 - code file and line information
+
+Supported change kinds: `symbol_added`, `symbol_removed`, `signature_changed`, `return_type_changed`, `parameter_added`, `parameter_removed`, `parameter_type_changed`, `parameter_default_changed`, and `parameter_order_changed`.
 
 JSON output is intended for CI integrations and other developer tools.
 
